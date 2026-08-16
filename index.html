@@ -197,7 +197,9 @@ input[type=number]{-moz-appearance:textfield;}
      ───────────────────────────────────────────────────────── -->
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#2563eb">
+<link rel="icon" href="./icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="점검">
@@ -3742,7 +3744,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '20260816-1824';
+  var BUILD = '20260816-1849';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
