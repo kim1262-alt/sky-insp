@@ -1557,6 +1557,42 @@ async function buildForm(inspType) {
     sections[item.섹션].push(item);
   });
 
+  /* ── 발전 관련 칸을 보일지 결정합니다 ──────────────────────
+     일반저압·일반고압은 「수용가」이지 발전소가 아닙니다.
+       · 날씨/기온      발전량을 판단하려고 적는 값입니다
+       · 송전전력       발전용 전력량계의 값입니다 — 계량기 자체가 없습니다
+     그동안 이 칸들이 그대로 떠서 빈칸으로 제출되고 있었습니다.
+
+     ⚠️ 중첩 템플릿 리터럴(${...} 안에 다시 백틱)을 쓰지 않습니다.
+        예전에 GAS 아이프레임에서 페이지가 통째로 안 그려진 적이 있습니다.
+        그래서 문자열을 미리 조립해 두고 한 번만 끼워 넣습니다.
+     ───────────────────────────────────────────────────────── */
+  const isGeneral = (site.설비구분 || '').includes('일반');
+
+  var envHtml = '';
+  if (!isGeneral) {
+    envHtml =
+      '<div class="row2">'
+    +   '<div class="fg">'
+    +     '<label>날씨 <button type="button" class="btn btn-out btn-sm" onclick="autoWeather()" style="margin-left:.4rem;">&#127788; 자동조회</button>'
+    +       '<span id="weatherHint" style="font-weight:400;color:var(--warn);font-size:.75rem;display:none;">&#128244; 직접 적어주세요</span></label>'
+    +     '<input type="text" id="f_weather" placeholder="맑음">'
+    +   '</div>'
+    +   '<div class="fg"><label>기온(&deg;C)</label>'
+    +     '<input type="text" id="f_temp" inputmode="decimal" placeholder="25.0" oninput="handleSmartInput(this)"></div>'
+    + '</div>'
+    + '<div class="row2">'
+    +   '<div class="fg"><label>전월 송전전력'
+    +     '<span style="font-weight:400;color:var(--muted);font-size:.75rem;">(발전용 전력량계)</span></label>'
+    +     '<input type="text" id="f_prev_power" inputmode="decimal" placeholder="kWh" oninput="handleSmartInput(this)">'
+    +     '<div id="prevPowerHint" style="font-size:.76rem;margin-top:.25rem;min-height:1rem;"></div>'
+    +   '</div>'
+    +   '<div class="fg"><label>현재 송전전력'
+    +     '<span style="font-weight:400;color:var(--muted);font-size:.75rem;">(발전용 전력량계)</span></label>'
+    +     '<input type="text" id="f_curr_power" inputmode="decimal" placeholder="kWh" oninput="handleSmartInput(this)"></div>'
+    + '</div>';
+  }
+
   let html = '';
   html += `<div class="card" style="background:#f0f4ff;font-size:.88rem;padding:.75rem 1rem;margin-bottom:.75rem;">
     <div style="font-weight:700;">${site.name}</div>
@@ -1571,21 +1607,7 @@ async function buildForm(inspType) {
     <label>점검회차 <span style="font-weight:400;color:var(--muted);font-size:.78rem;">제출 이력 기준 자동 계산 · 변경 가능</span></label>
     <select id="f_seq"></select>
   </div>
-  <div class="row2">
-    <div class="fg">
-      <label>날씨 <button class="btn btn-out btn-sm" onclick="autoWeather()" style="margin-left:.4rem;">🌤 자동조회</button>
-        <span id="weatherHint" style="font-weight:400;color:var(--warn);font-size:.75rem;display:none;">📴 직접 적어주세요</span></label>
-      <input type="text" id="f_weather" placeholder="맑음">
-    </div>
-    <div class="fg"><label>기온(°C)</label><input type="text" id="f_temp" inputmode="decimal" placeholder="25.0" oninput="handleSmartInput(this)"></div>
-  </div>
-  <div class="row2">
-    <div class="fg"><label>전월 송전전력<span style="font-weight:400;color:var(--muted);font-size:.75rem;">(발전용 전력량계)</span></label>
-      <input type="text" id="f_prev_power" inputmode="decimal" placeholder="kWh" oninput="handleSmartInput(this)">
-      <div id="prevPowerHint" style="font-size:.76rem;margin-top:.25rem;min-height:1rem;"></div>
-    </div>
-    <div class="fg"><label>현재 송전전력<span style="font-weight:400;color:var(--muted);font-size:.75rem;">(발전용 전력량계)</span></label><input type="text" id="f_curr_power" inputmode="decimal" placeholder="kWh" oninput="handleSmartInput(this)"></div>
-  </div>
+  ${envHtml}
   <div id="invKwhSection"></div>
 
 <div id="trTempSection"></div>
@@ -3077,8 +3099,11 @@ async function autoWeather() {
   // 좌표가 있으면 함께 보냅니다 — 시/군 단위 조회보다 훨씬 정확합니다
   const r = await api('getWeather', { address: addr, lat: site.위도 || '', lng: site.경도 || '' });
   if (r?.success) {
-    document.getElementById('f_weather').value = r.weather;
-    document.getElementById('f_temp').value = r.temp;
+    /* 일반 수용가는 이 칸이 아예 없습니다 — 없어도 오류가 안 나게 둡니다 */
+    const wEl = document.getElementById('f_weather');
+    const tEl = document.getElementById('f_temp');
+    if (wEl) wEl.value = r.weather;
+    if (tEl) tEl.value = r.temp;
     const note = r.source === '시군' ? ' (시/군 기준)' : '';
     toast(`✅ ${r.weather} ${r.temp}°C${note}`);
   } else {
@@ -4011,7 +4036,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '20260816-2023';
+  var BUILD = '20260816-2317';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
