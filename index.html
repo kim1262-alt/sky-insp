@@ -235,6 +235,17 @@ input[type=number]{-moz-appearance:textfield;}
       <button class="btn btn-out btn-sm" onclick="flushQueue()">지금 업로드</button>
     </div>
 
+    <!-- 오프라인 준비 : 통신되는 곳에서 미리 받아두는 버튼 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.6rem;
+                background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;
+                padding:.6rem .9rem;margin-bottom:.6rem;">
+      <span style="font-size:.84rem;color:#1d4ed8;line-height:1.35;">
+        📥 오프라인 준비
+        <span id="prepInfo" style="display:block;font-size:.75rem;color:var(--muted);font-weight:400;"></span>
+      </span>
+      <button class="btn btn-out btn-sm" id="prepBtn" style="flex:none;" onclick="prepareOffline()">받아두기</button>
+    </div>
+
     <div class="tabs">
       <div class="tab active" onclick="switchTab('list')">📋 발전소 목록</div>
       <div class="tab" onclick="switchTab('mine')">🔍 내 점검</div>
@@ -788,6 +799,7 @@ async function afterLogin(r, fromCache) {
   document.getElementById('hdUser').textContent = `${r.name} (${r.role})`;
   if (r.role === '관리자') document.getElementById('tabAdmin').style.display = '';
   if (fromCache) toast('📴 오프라인 — 지난번 정보로 들어왔습니다');
+  renderPrepInfo();
   await loadSites();
   autoFlushSubmits();  // 로그인 직후 대기 제출 자동 전송
 }
@@ -972,7 +984,7 @@ async function openSite(no) {
   }
 
   // 설비정보/미결사항/전달사항은 백그라운드 병렬 로드
-  S.equipReady = api('getEquipInfo', {no}).then(equip => {
+  S.equipReady = fetchEquipInfo(no).then(equip => {
     S.currentEquip = equip;
     // 이미 점검폼이 열려 있으면 채널 반영 위해 다시 그림
     if (document.getElementById('mt-form')?.classList.contains('active')
@@ -1858,6 +1870,125 @@ async function fetchCheckItems(site, inspType) {
     }
   } catch (_) {}
   return [];
+}
+
+/* ══════════════════════════════════════════════════════════
+   설비정보 캐시 + 오프라인 준비
+
+   설비정보(인버터 수량·채널 구성)가 없으면 점검표를 그릴 수 없습니다.
+   예전에는 발전소를 열 때마다 서버에 물어보기만 하고 남겨두지 않아,
+   통신이 끊긴 곳에서는 발전소를 바꾸는 순간 막혔습니다.
+   ══════════════════════════════════════════════════════════ */
+
+/** 설비정보 — 서버 먼저, 안 되면 지난번에 받아둔 것 */
+async function fetchEquipInfo(no) {
+  if (!no) return null;
+  const key = 'equip_' + no;
+
+  const equip = await api('getEquipInfo', { no });
+  if (equip) {
+    try { localStorage.setItem(key, JSON.stringify(equip)); } catch (_) {}
+    return equip;
+  }
+
+  try {
+    const cached = JSON.parse(localStorage.getItem(key) || 'null');
+    if (cached) { console.log('오프라인 — 저장된 설비정보 사용:', no); return cached; }
+  } catch (_) {}
+  return null;
+}
+
+/* ── [오프라인 준비] ────────────────────────────────────────
+   아침에 통신되는 곳에서 한 번 눌러두면, 담당 발전소의 설비정보와
+   점검항목을 미리 받아 둡니다. 그날은 통신 없이도 작성됩니다.
+
+   ⚠️ 방문할 때 저장하는 것만으로는 부족합니다.
+      「처음 가는 통신 두절 현장」이 정확히 안 되기 때문입니다.
+   ───────────────────────────────────────────────────────── */
+const PREP_KEY = 'offlinePrepAt';
+
+function renderPrepInfo() {
+  const el = document.getElementById('prepInfo');
+  if (!el) return;
+  let at = null;
+  try { at = localStorage.getItem(PREP_KEY); } catch (_) {}
+  el.textContent = at
+    ? '마지막 준비 ' + String(at).slice(0, 16).replace('T', ' ')
+    : '아직 받아둔 적이 없습니다';
+}
+
+/** 여러 개를 한꺼번에 부르되 동시 개수를 제한합니다 (서버 부담·실패율 관리) */
+async function runPool(jobs, limit, onEach) {
+  let i = 0;
+  const workers = Array.from({ length: Math.min(limit, jobs.length) }, async () => {
+    while (i < jobs.length) {
+      const job = jobs[i++];
+      try { await job(); } catch (_) {}
+      if (onEach) onEach();
+    }
+  });
+  await Promise.all(workers);
+}
+
+async function prepareOffline() {
+  const btn = document.getElementById('prepBtn');
+  if (btn && btn.disabled) return;
+
+  /* 담당 발전소를 받습니다. 관리자가 「전체」를 보고 있을 때 249곳을
+     통째로 받으면 몇 분씩 걸리고 저장 공간도 위험하므로 물어봅니다. */
+  let list = S.siteOwn || [];
+  if (!list.length) list = S.siteAll || [];
+  if (S.siteView === 'all' && (S.siteAll || []).length > list.length) {
+    if (confirm(`전체 ${S.siteAll.length}곳을 모두 받을까요?\n\n`
+              + `[취소] 를 누르면 내 담당 ${list.length}곳만 받습니다.\n`
+              + `전체를 받으면 몇 분 걸리고 저장 공간을 많이 씁니다.`)) {
+      list = S.siteAll;
+    }
+  }
+  if (!list.length) return toast('받아둘 발전소가 없습니다');
+
+  /* 점검항목은 「설비구분 + 점검구분 + 측정프로필」이 같으면 내용도 같습니다.
+     발전소마다 부르면 같은 것을 여러 번 받게 되므로 중복을 걷어냅니다. */
+  const TYPES = ['월차점검', '기록', '측정', '열화상촬영'];
+  const itemJobs = new Map();
+  list.forEach(s => TYPES.forEach(t => {
+    const k = [s.설비구분 || '', t, s.측정프로필 || ''].join('|');
+    if (!itemJobs.has(k)) itemJobs.set(k, { site: s, type: t });
+  }));
+
+  const jobs = []
+    .concat(list.map(s => () => fetchEquipInfo(s.no)))
+    .concat([...itemJobs.values()].map(j => () => fetchCheckItems(j.site, j.type)));
+
+  const total = jobs.length;
+  let done = 0;
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; }
+
+  const tick = () => {
+    done++;
+    if (btn) btn.textContent = `받는 중 ${done}/${total}`;
+  };
+
+  try {
+    await runPool(jobs, 4, tick);
+
+    /* 실제로 담겼는지 세어봅니다 — 「받았다」고만 하고 비어 있으면 현장에서 낭패입니다 */
+    let okEquip = 0;
+    list.forEach(s => { try { if (localStorage.getItem('equip_' + s.no)) okEquip++; } catch (_) {} });
+
+    if (okEquip === 0) {
+      toast('❌ 하나도 받지 못했습니다. 통신 상태를 확인해 주세요');
+    } else {
+      try { localStorage.setItem(PREP_KEY, new Date().toISOString()); } catch (_) {}
+      renderPrepInfo();
+      toast(okEquip === list.length
+        ? `✅ 발전소 ${okEquip}곳 준비 완료`
+        : `⚠️ ${list.length}곳 중 ${okEquip}곳만 받았습니다. 다시 눌러주세요`);
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label || '받아두기'; }
+  }
 }
 
 // ── 사진 압축 (H-11) ────────────────────────────────────
@@ -3092,7 +3223,7 @@ async function validateCh(el, maxCnt, label, slot) {
     if (confirm(`${label||'접속반'} 채널 수가 설정값(${maxCnt})과 다릅니다.\n실측값(${nums.length})으로 업데이트할까요?`)) {
       await api('updateChannelCount', {no: S.currentSite?.no, slot: slot, newCount: nums.length, newLabel: label});
       toast(`✅ 채널 수 ${nums.length}로 업데이트`);
-      S.currentEquip = await api('getEquipInfo', {no: S.currentSite?.no});
+      S.currentEquip = await fetchEquipInfo(S.currentSite?.no);
     }
   }
 }
@@ -3802,7 +3933,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '20260816-1905';
+  var BUILD = '20260816-1931';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
