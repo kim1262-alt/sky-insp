@@ -681,6 +681,14 @@ async function appInit() {
     if (token) {
       const r = await api('loginByToken', {token});
       if (r?.success) { await afterLogin(r); return; }
+      /* r 이 null 이면 「서버가 대답을 안 한 것」 — 통신 두절입니다.
+         이때만 지난번 로그인 정보로 들어갑니다.
+         서버가 {success:false} 로 「토큰이 틀렸다」고 답한 경우에는
+         그냥 로그인 화면을 띄웁니다. */
+      if (r === null) {
+        const saved = loadProfile();
+        if (saved) { await afterLogin(saved, true); return; }
+      }
     }
   } catch(e) { console.warn('Token login fail', e); }
 
@@ -713,23 +721,73 @@ async function checkQueue() {
   if (cnt > 0) { document.getElementById('queueCnt').textContent=cnt; bar.classList.add('show'); }
   else bar.classList.remove('show');
 }
+/* ══════════════════════════════════════════════════════════
+   오프라인 로그인
+
+   통신이 없으면 서버에 「이 사람 맞나요?」를 물어볼 수가 없습니다.
+   그래서 마지막으로 성공한 로그인 정보를 기기에 남겨두고,
+   【서버가 대답하지 않을 때만】 그것으로 들어갑니다.
+
+   ⚠️ 이건 보안 장치가 아닙니다.
+      서버는 여전히 모든 요청에서 토큰을 확인합니다.
+      가짜 정보로 들어와도 통신이 되는 순간 아무것도 못 합니다.
+      화면을 열어 이미 받아둔 내용을 보는 데까지만 쓰입니다.
+   ══════════════════════════════════════════════════════════ */
+const PROFILE_KEY = 'sky_profile';
+
+function saveProfile(r) {
+  try {
+    if (!r || !r.name) return;
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({
+      success: true,
+      no:      r.no,
+      name:    r.name,
+      role:    r.role,
+      email:   r.email,
+      token:   r.token,
+      devMode: r.devMode,
+      savedAt: new Date().toISOString()
+    }));
+  } catch (_) {}
+}
+
+function loadProfile() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null');
+    return (p && p.name) ? p : null;
+  } catch (_) { return null; }
+}
+
 async function doLogin() {
   const name = document.getElementById('loginName').value.trim();
   if (!name) return toast('이름을 입력하세요');
+
   const r = await api('login', {name});
-  if (r?.success) await afterLogin(r);
-  else toast('등록된 직원이 아닙니다');
+  if (r?.success) return afterLogin(r);
+
+  /* 「직원이 아니다」와 「물어볼 데가 없다」는 전혀 다른 상황입니다.
+     예전에는 둘 다 「등록된 직원이 아닙니다」로 나와서,
+     통신이 끊긴 것뿐인데 계정 문제로 오해하게 됐습니다. */
+  if (r === null) {
+    const saved = loadProfile();
+    if (saved && saved.name === name) return afterLogin(saved, true);
+    return toast('📴 통신이 안 됩니다. 통신되는 곳에서 한 번 로그인해 두셔야 합니다');
+  }
+  toast('등록된 직원이 아닙니다');
 }
 
-async function afterLogin(r) {
+async function afterLogin(r, fromCache) {
   S.user = r;
-  /* PWA 추가 — 다음에 앱을 켤 때 로그인 화면을 건너뛰기 위해 저장합니다.
-     주소창이 없는 설치형 앱에서는 ?token= 을 붙일 수 없기 때문입니다. */
+  /* 다음에 앱을 켤 때 쓰려고 남겨둡니다.
+     설치형 앱은 주소창이 없어 ?token= 을 붙일 수 없기 때문입니다. */
   try { if (r && r.token) localStorage.setItem('sky_token', r.token); } catch (_) {}
+  if (!fromCache) saveProfile(r);
+
   document.getElementById('loginWrap').style.display = 'none';
   document.getElementById('mainApp').style.display = 'block';
   document.getElementById('hdUser').textContent = `${r.name} (${r.role})`;
   if (r.role === '관리자') document.getElementById('tabAdmin').style.display = '';
+  if (fromCache) toast('📴 오프라인 — 지난번 정보로 들어왔습니다');
   await loadSites();
   autoFlushSubmits();  // 로그인 직후 대기 제출 자동 전송
 }
@@ -3744,7 +3802,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '20260816-1849';
+  var BUILD = '20260816-1905';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
