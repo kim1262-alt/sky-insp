@@ -1,0 +1,3766 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🌞 수용가 점검 시스템</title>
+<style>
+:root {
+  --pri:#2563eb; --pri-d:#1e40af; --ok:#16a34a; --ng:#dc2626;
+  --warn:#d97706; --bg:#f1f5f9; --card:#fff; --border:#e2e8f0;
+  --text:#1e293b; --muted:#64748b;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans KR','Apple SD Gothic Neo',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.wrap{max-width:720px;margin:0 auto;padding:.75rem;}
+
+/* 헤더 */
+.hdr{background:var(--pri);color:#fff;padding:.9rem 1rem;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;}
+.hdr h1{font-size:1rem;font-weight:700;}
+.hdr .meta{font-size:.8rem;opacity:.85;display:flex;align-items:center;gap:.5rem;}
+
+/* 카드 */
+.card{background:var(--card);border-radius:12px;padding:1rem 1.1rem;margin-bottom:.75rem;box-shadow:0 1px 3px rgba(0,0,0,.07);}
+.card-title{font-size:.95rem;font-weight:700;color:var(--pri);border-bottom:2px solid var(--pri);padding-bottom:.4rem;margin-bottom:.8rem;}
+
+/* 섹션 타이틀 */
+.sec-title{font-size:.88rem;font-weight:700;color:var(--pri);margin:1rem 0 .5rem;padding-bottom:.3rem;border-bottom:1px solid var(--border);}
+
+/* 폼 */
+.fg{margin-bottom:.75rem;}
+label{display:block;font-size:.85rem;font-weight:600;margin-bottom:.3rem;color:var(--text);}
+input,select,textarea{width:100%;padding:.65rem .75rem;border:1.5px solid var(--border);border-radius:8px;font-size:.95rem;color:var(--text);background:#fff;
+  /* iOS Safari 기본 스타일 초기화 */
+  -webkit-appearance:none;appearance:none;box-sizing:border-box;}
+input[type="date"],input[type="time"],input[type="datetime-local"]{
+  /* 날짜/시간 입력창 모바일 정렬 */
+  display:block;min-height:2.8rem;text-align:left;padding-left:.75rem;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px rgba(37,99,235,.12);}
+textarea{min-height:72px;resize:vertical;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;}
+/* 모달 내부 폼 영역 넘침 방지 */
+#mt-form,#mt-info{overflow-x:hidden;width:100%;}
+
+/* 버튼 */
+.btn{width:100%;padding:.75rem;border:none;border-radius:8px;font-size:.95rem;font-weight:700;cursor:pointer;transition:.15s;}
+.btn+.btn{margin-top:.4rem;}
+.btn-pri{background:var(--pri);color:#fff;}
+.btn-ok{background:var(--ok);color:#fff;}
+.btn-out{background:#fff;color:var(--pri);border:2px solid var(--pri);}
+.btn-warn{background:var(--warn);color:#fff;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+.btn-sm{width:auto;padding:.4rem .9rem;font-size:.82rem;}
+
+/* O/X/△ */
+.ox-table{display:flex;flex-direction:column;gap:.25rem;}
+.ox-row{display:flex;justify-content:space-between;align-items:center;padding:.45rem .2rem;border-bottom:1px solid #f1f5f9;}
+.ox-row span{font-size:.88rem;flex:1;padding-right:.5rem;}
+.ox-cam{display:flex;align-items:center;gap:.4rem;}
+.ox-grp{display:flex;gap:.3rem;}
+.ox-btn{width:42px;height:42px;border-radius:8px;border:2px solid var(--border);font-size:.95rem;font-weight:700;cursor:pointer;background:#fff;}
+.ox-btn.o{color:var(--ok);border-color:var(--ok);}
+.ox-btn.x{color:var(--ng);border-color:var(--ng);}
+.ox-btn.t{color:var(--warn);border-color:var(--warn);}
+.ox-btn.o.sel{background:var(--ok);color:#fff;}
+.ox-btn.x.sel{background:var(--ng);color:#fff;}
+.ox-btn.t.sel{background:var(--warn);color:#fff;}
+/* 해당없음(/) 버튼 */
+.ox-btn.na{color:var(--muted);border-color:var(--muted);font-size:.82rem;}
+.ox-btn.na.sel{background:var(--muted);color:#fff;}
+/* X 선택 시 메모/사진 영역 */
+.ox-detail{display:none;margin:0 0 .4rem .2rem;}
+.ox-detail-inner{background:#fff5f5;border:1.5px solid #fecaca;border-radius:8px;padding:.6rem .75rem;border-top:none;border-top-left-radius:0;border-top-right-radius:0;}
+/* ox-row 이름+배지 레이아웃 */
+.ox-name{display:flex;flex-direction:column;gap:.2rem;flex:1;min-width:0;}
+.ox-name span{font-size:.88rem;line-height:1.35;}
+/* 필수 사진 배지 */
+.photo-req-badge{font-size:.72rem;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;
+  border-radius:6px;padding:1px 6px;display:inline-flex;align-items:center;gap:.2rem;width:fit-content;}
+.photo-req-badge.satisfied{color:#166534;background:#dcfce7;border-color:#86efac;}
+/* 카메라 버튼 사진 수 배지 */
+.cam-count{font-size:.72rem;font-weight:700;}
+.cam-btn{width:36px;height:36px;border-radius:8px;border:1.5px solid var(--border);background:#f8fafc;font-size:1rem;cursor:pointer;}
+.cam-btn.done{border-color:var(--ok);background:#f0fdf4;}
+
+/* 채널 전류 */
+.ch-wrap{display:flex;flex-direction:column;gap:.6rem;}
+.ch-row{background:#f8fafc;border-radius:8px;padding:.7rem;}
+.ch-lbl{font-weight:600;font-size:.87rem;margin-bottom:.35rem;display:flex;justify-content:space-between;}
+.ch-hint{font-weight:400;color:var(--muted);font-size:.78rem;}
+.ch-input{font-family:monospace;letter-spacing:.04em;font-size:.95rem;}
+.ch-status{font-size:.78rem;margin-top:.25rem;min-height:1rem;}
+
+/* 인버터/변압기 동적 */
+.dyn-row{display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;}
+.dyn-lbl{font-size:.85rem;font-weight:600;min-width:80px;}
+.dyn-input{flex:1;padding:.6rem .7rem;border:1.5px solid var(--border);border-radius:8px;font-size:.9rem;}
+
+/* 점검구분 라디오 */
+.insp-types{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.5rem;}
+.insp-type-btn{padding:.65rem;border:2px solid var(--border);border-radius:8px;text-align:center;cursor:pointer;font-size:.88rem;font-weight:600;background:#fff;transition:.15s;}
+.insp-type-btn.active{border-color:var(--pri);background:#eff6ff;color:var(--pri);}
+
+/* 발전소 목록 */
+.site-item{padding:.85rem;border-bottom:1px solid #f1f5f9;cursor:pointer;display:flex;justify-content:space-between;align-items:center;}
+.site-item:hover{background:#f8fafc;}
+.site-name{font-weight:600;font-size:.92rem;}
+.site-meta{font-size:.78rem;color:var(--muted);margin-top:2px;}
+.site-addr{font-size:.74rem;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px;}
+.badge{padding:2px 8px;border-radius:12px;font-size:.72rem;background:#dbeafe;color:#1d4ed8;white-space:nowrap;}
+.badge-ok{background:#dcfce7;color:#166534;}
+.badge-ng{background:#fee2e2;color:#991b1b;}
+
+/* 탭 */
+.tabs{display:flex;gap:.4rem;margin-bottom:.8rem;flex-wrap:wrap;}
+.tab{padding:.45rem .9rem;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;font-size:.85rem;font-weight:600;transition:.15s;}
+.tab.active{background:var(--pri);color:#fff;border-color:var(--pri);}
+.pane{display:none;}
+.pane.active{display:block;}
+
+/* 미결사항 배너 */
+.pending-banner{background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:.75rem;margin-bottom:.75rem;}
+.pending-banner h3{color:var(--warn);font-size:.88rem;margin-bottom:.5rem;}
+.pending-item{padding:.4rem 0;border-bottom:1px solid #fde68a;font-size:.84rem;}
+.pending-item:last-child{border:none;}
+
+/* 모달 */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;overflow-y:auto;}
+.modal-bg.show{display:block;}
+.modal-inner{max-width:720px;margin:1rem auto;padding:0 .5rem;}
+
+/* 토스트 */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:.65rem 1.4rem;border-radius:8px;font-size:.88rem;z-index:999;display:none;max-width:90vw;text-align:center;}
+.toast.show{display:block;animation:fadeUp .25s;}
+@keyframes fadeUp{from{opacity:0;transform:translate(-50%,12px)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* 오프라인 */
+.offline-bdg{background:var(--warn);color:#fff;padding:2px 10px;border-radius:10px;font-size:.75rem;}
+.queue-bar{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:.6rem .9rem;margin-bottom:.6rem;font-size:.84rem;display:none;}
+.queue-bar.show{display:flex;justify-content:space-between;align-items:center;}
+
+/* 스피너 */
+.spin{display:inline-block;width:1em;height:1em;border:2.5px solid #fff4;border-top-color:#fff;border-radius:50%;animation:rot .7s linear infinite;}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* 로그인 */
+#loginWrap{max-width:360px;margin:3rem auto;}
+.login-logo{text-align:center;margin-bottom:2rem;}
+.login-logo h1{color:var(--pri);font-size:1.5rem;}
+.login-logo p{color:var(--muted);margin-top:.3rem;font-size:.88rem;}
+
+/* 전달사항 모달 */
+.notice-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;align-items:center;justify-content:center;padding:1rem;}
+.notice-modal.show{display:flex;}
+.notice-box{background:#fff;border-radius:16px;width:100%;max-width:480px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.18);}
+.notice-hdr{background:var(--pri);color:#fff;padding:.9rem 1.1rem;display:flex;justify-content:space-between;align-items:center;}
+.notice-hdr h3{font-size:.95rem;font-weight:700;margin:0;}
+.notice-hdr .badge-type{font-size:.72rem;background:rgba(255,255,255,.25);padding:2px 8px;border-radius:10px;}
+.notice-body{padding:1rem 1.1rem;max-height:60vh;overflow-y:auto;}
+.notice-item{padding:.75rem;border-radius:10px;margin-bottom:.6rem;border-left:4px solid;}
+.notice-item.common{background:#fff7ed;border-color:#f97316;}
+.notice-item.site{background:#eff6ff;border-color:var(--pri);}
+.notice-item .n-type{font-size:.72rem;font-weight:700;margin-bottom:.3rem;}
+.notice-item .n-text{font-size:.9rem;line-height:1.5;}
+.notice-item .n-date{font-size:.75rem;color:var(--muted);margin-top:.3rem;}
+.notice-foot{padding:.75rem 1.1rem;border-top:1px solid var(--border);}
+
+/* 관리자 전달사항 입력 패널 */
+.admin-notice-panel{background:#fff3cd;border:1.5px solid #ffc107;border-radius:10px;padding:.85rem;margin-bottom:.75rem;}
+.admin-notice-panel h4{font-size:.88rem;font-weight:700;color:#856404;margin-bottom:.6rem;}
+
+/* 전체양호 버튼 */
+.all-ok-bar{display:flex;align-items:center;gap:.6rem;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:.6rem .9rem;margin-bottom:.6rem;}
+.all-ok-bar span{font-size:.85rem;color:#166534;font-weight:600;flex:1;}
+.all-ok-btn{padding:.45rem 1rem;border:none;border-radius:8px;font-size:.88rem;font-weight:700;cursor:pointer;background:var(--ok);color:#fff;}
+.all-ok-btn.active{background:#166534;}
+
+/* 사진 그리드 */
+.photo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.4rem;margin-top:.5rem;}
+.photo-thumb{aspect-ratio:1;border-radius:6px;overflow:hidden;position:relative;background:#f1f5f9;}
+.photo-thumb img{width:100%;height:100%;object-fit:cover;}
+.photo-thumb .del-btn{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;line-height:20px;text-align:center;}
+
+@media(max-width:480px){
+  .row2,.row3{grid-template-columns:1fr;}
+  .ox-btn{width:40px;height:40px;}
+  .photo-grid{grid-template-columns:repeat(3,1fr);}
+}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+input[type=number]{-moz-appearance:textfield;}
+</style>
+
+<!-- ── PWA 부품 ─────────────────────────────────────────────
+     manifest  : 「이건 설치할 수 있는 앱입니다」라는 명찰
+     apple-*   : 아이폰은 매니페스트를 잘 안 봐서 따로 알려줘야 합니다
+     ───────────────────────────────────────────────────────── -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#2563eb">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="점검">
+</head>
+<body>
+
+<div id="loginWrap" class="wrap" style="display:none;">
+  <div class="login-logo">
+    <h1>🌞 수용가 점검 시스템</h1>
+    <p>하늘 전기안전관리</p>
+  </div>
+  <div class="card">
+    <div class="fg">
+      <label>이름</label>
+      <input id="loginName" type="text" placeholder="이름을 입력하세요" autocomplete="name">
+    </div>
+    <button class="btn btn-pri" onclick="doLogin()">로그인</button>
+  </div>
+</div>
+
+<div id="mainApp" style="display:none;">
+  <div class="hdr">
+    <h1>🌞 점검 시스템</h1>
+    <div class="meta">
+      <span id="hdUser"></span>
+      <span class="offline-bdg" id="offBdg" style="display:none;">오프라인</span>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:.75rem;">
+    <div class="queue-bar" id="queueBar">
+      <span>📷 대기 사진 <strong id="queueCnt">0</strong>장</span>
+      <button class="btn btn-out btn-sm" onclick="flushQueue()">지금 업로드</button>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('list')">📋 발전소 목록</div>
+      <div class="tab" onclick="switchTab('mine')">🔍 내 점검</div>
+      <div class="tab" id="tabAdmin" style="display:none;" onclick="switchTab('admin')">📊 현황</div>
+    </div>
+
+    <div class="pane active" id="pane-list">
+      <div id="siteFilterBar"></div>
+      <input id="searchBox" type="search" placeholder="🔍 발전소 검색..."
+             oninput="filterSites(this.value)"
+             style="width:100%;padding:.65rem .9rem;border:1.5px solid var(--border);border-radius:8px;font-size:.95rem;margin-bottom:.75rem;">
+      <div class="card" style="padding:0;"><div id="siteListEl"></div></div>
+    </div>
+
+    <div class="pane" id="pane-mine">
+      <div class="card"><div class="card-title">이번 달 점검 현황</div>
+        <div id="mineList"></div>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-admin">
+      
+      <div class="card">
+        <div class="card-title">📢 공통 전달사항 관리</div>
+        <div class="admin-notice-panel">
+          <h4>현재 공통 전달사항</h4>
+          <div id="commonNoticePreview" style="font-size:.88rem;color:#555;min-height:2rem;">
+            (없음)
+          </div>
+        </div>
+        <div class="fg">
+          <label>새 공통 전달사항</label>
+          <textarea id="commonNoticeInput" placeholder="전체 점검원에게 전달할 내용 입력&#10;예) 오늘부터 점검사진 필수 첨부 바랍니다" style="min-height:80px;"></textarea>
+        </div>
+        <div class="row2">
+          <div class="fg">
+            <label>만료일 (선택)</label>
+            <input type="date" id="commonNoticeExpiry">
+          </div>
+          <div class="fg">
+            <label>중요도</label>
+            <select id="commonNoticeLevel">
+              <option value="일반">일반</option>
+              <option value="중요">⚠️ 중요</option>
+              <option value="긴급">🚨 긴급</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-ok" onclick="saveCommonNotice()">📢 공통 전달사항 저장</button>
+        <button class="btn btn-out" style="margin-top:.4rem;" onclick="clearCommonNotice()">🗑 삭제</button>
+        <button class="btn" style="margin-top:.4rem;background:#f1f5f9;color:#64748b;font-size:.85rem;"
+                onclick="resetNoticeAcks()">🔄 이 기기의 「확인했습니다」 기록 초기화</button>
+      </div>
+      <div class="card"><div class="card-title">월간 점검 현황</div>
+        <div id="adminContent"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="inspModal">
+  <div class="modal-inner">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
+        <span id="modalTitle" style="font-size:1rem;font-weight:700;"></span>
+        <button onclick="closeModal()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--muted);">✕</button>
+      </div>
+
+      <!-- 사진 탭은 제거했습니다 (H-3).
+           탭바가 항상 숨겨져 있어 도달할 수 없었고, 기능도 점검폼 안의
+           「항목별 사진」·「추가사진」과 중복이었습니다. -->
+
+<div class="pane active" id="mt-info">
+        <div id="siteInfoEl"></div>
+        <button class="btn btn-pri" style="margin-top:.75rem;" onclick="startInspection()">📝 점검 시작</button>
+        <button class="btn" style="margin-top:.5rem;background:#fee2e2;color:#b91c1c;border:1.5px solid #fecaca;"
+                onclick="startEmergency()">🚨 긴급출동</button>
+      </div>
+
+<div class="pane" id="mt-form">
+        <button type="button" class="btn btn-out btn-sm" style="margin-bottom:.6rem;" onclick="switchMTab('info')">← 기본정보</button>
+        <div id="pendingBannerEl"></div>
+        <div id="formEl"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="notice-modal" id="noticeModal">
+  <div class="notice-box">
+    <div class="notice-hdr">
+      <h3>📢 전달사항</h3>
+      <span class="badge-type" id="noticeSiteName"></span>
+    </div>
+    <div class="notice-body" id="noticeBody"></div>
+    <div class="notice-foot">
+      <button class="btn btn-pri" onclick="confirmNotice()">✅ 확인했습니다</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ── PWA 시작값 ─────────────────────────────────────────────
+   예전에는 서버가 이 자리에 토큰을 찍어 넣어줬습니다.
+   이제 서버가 화면을 만들지 않으므로, 휴대폰에 저장해 둔 값을 씁니다.
+   ───────────────────────────────────────────────────────── */
+var INJECTED_TOKEN = (function () {
+  try {
+    var q = new URLSearchParams(location.search).get('token');
+    if (q) { localStorage.setItem('sky_token', q); return q; }   /* 링크로 처음 들어온 경우 */
+    return localStorage.getItem('sky_token') || '';
+  } catch (_) { return ''; }
+})();
+</script>
+<script>
+function handleSmartInput(el) {
+  if (!el) return;
+  let v = el.value;
+  v = v.replace(/\.\./g, '/')
+       .replace(/ +/g, '/')
+       .replace(/\/+/g, '/')
+       .replace(/\/\./g, '/');
+  el.value = v;
+}
+
+// ── 인버터구분 판정 (N-3) ──────────────────────────────
+// 실물 시트(수용가설비관리대장 L열)의 값은 'S'(스트링) / 'C'(센트럴) 입니다.
+// 예전 코드는 '스트링' / '센트럴' 한글만 비교해서 항상 false 였습니다.
+// 두 표기를 모두 받아들이도록 여기 한 곳에서만 판정합니다.
+function isStringInv(v) {
+  const s = String(v || '').trim().toUpperCase();
+  return s === 'S' || s.indexOf('스트링') >= 0;
+}
+function isCentralInv(v) {
+  const s = String(v || '').trim().toUpperCase();
+  return s === 'C' || s.indexOf('센트럴') >= 0;
+}
+
+const S = {
+  user: null, sites: [], currentSite: null, currentEquip: null,
+  checkItems: [], isOnline: navigator.onLine, photoMap: {}
+};
+let idb;
+const IDB_NAME = 'SolarInspDB', IDB_STORE = 'photoQ', IDB_SUBMIT = 'submitQ', IDB_DRAFT = 'draftQ';
+
+async function initIDB() {
+  return new Promise((res, rej) => {
+    // v3: draftQ(작성 중 임시저장) 추가 — 발전소당 1건이므로 keyPath는 설비번호
+    const req = indexedDB.open(IDB_NAME, 3);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(IDB_STORE))
+        db.createObjectStore(IDB_STORE, {keyPath:'id',autoIncrement:true});
+      if (!db.objectStoreNames.contains(IDB_SUBMIT))
+        db.createObjectStore(IDB_SUBMIT, {keyPath:'id',autoIncrement:true});
+      if (!db.objectStoreNames.contains(IDB_DRAFT))
+        db.createObjectStore(IDB_DRAFT, {keyPath:'no'});
+    };
+    req.onsuccess = e => {
+      idb = e.target.result;
+      // ⚠️ iOS Safari는 앱이 백그라운드로 가면 IndexedDB 연결을 닫아버립니다.
+      //    닫힌 연결을 계속 들고 있으면 다음 트랜잭션에서
+      //    "The database connection is closing" 오류가 납니다.
+      //    연결이 끊기면 즉시 비워서 다음 접근 때 다시 열리게 합니다.
+      idb.onclose = () => { idb = null; };
+      idb.onversionchange = () => { try { idb.close(); } catch (_) {} idb = null; };
+      res();
+    };
+    req.onerror = () => rej(req.error);
+  });
+}
+
+/**
+ * IndexedDB 작업 공통 래퍼 — 연결이 끊겨 있으면 다시 열고 한 번 재시도합니다.
+ * 모든 IDB 접근은 이 함수를 거치게 해서 "connection is closing" 오류를 막습니다.
+ */
+async function withIdb(fn) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      if (!idb) await initIDB();
+      if (!idb) return null;
+      return await fn(idb);
+    } catch (e) {
+      console.warn('IDB 오류 — 재연결 시도', e && e.message);
+      try { if (idb) idb.close(); } catch (_) {}
+      idb = null;
+      if (attempt === 1) throw e;
+    }
+  }
+  return null;
+}
+
+// ── 작성 중 자동 임시저장 ────────────────────────────────
+// 제출 버튼을 누르기 전에 앱이 종료되면 입력값과 사진이 전부 사라졌습니다.
+// iOS Safari는 백그라운드 탭을 공격적으로 정리하기 때문에, 전화를 받거나
+// 지도앱을 다녀오는 것만으로도 유실될 수 있었습니다.
+//  저장 시점: 입력 변경(2.5초 디바운스) · 사진 추가 직후 · 백그라운드 전환 · 페이지 이탈
+let _draftTimer = null;
+const DRAFT_DEBOUNCE = 2500;
+
+async function saveDraftNow() {
+  if (!idb || !S.currentSite) return;
+  if (S.editing) return;                                  // 수정 모드는 대상 아님
+  const formEl = document.getElementById('formEl');
+  if (!formEl || !formEl.innerHTML) return;               // 폼이 안 열렸으면 저장할 것 없음
+  if (typeof collectFormData !== 'function') return;
+
+  try {
+    const obj = {
+      no:              String(S.currentSite.no || ''),
+      설비명칭:        S.currentSite.name || '',
+      data:            collectFormData(),
+      photos:          S.photoMap || {},
+      inspTypes:       S.inspTypes || [],
+      extraTypesShown: S.extraTypesShown || [],
+      savedAt:         Date.now()
+    };
+    if (!obj.no) return;
+    const ok = await withIdb(db => new Promise((res, rej) => {
+      const tx = db.transaction(IDB_DRAFT, 'readwrite');
+      tx.objectStore(IDB_DRAFT).put(obj);   // 같은 발전소는 덮어쓰기
+      tx.oncomplete = () => res(true);
+      tx.onerror    = () => rej(tx.error || new Error('draft put 실패'));
+      tx.onabort    = () => rej(tx.error || new Error('draft put 중단'));
+    }));
+    if (ok) _draftWarned = false;
+  } catch (e) {
+    // ⚠️ 조용히 넘기면 안 됩니다. 용량이 꽉 차면 임시저장이 통째로 멈추는데
+    //    사용자는 안전하게 저장되고 있다고 믿게 됩니다.
+    console.warn('임시저장 실패', e);
+    const quota = e && (e.name === 'QuotaExceededError' || /quota/i.test(e.message || ''));
+    if (!_draftWarned) {
+      _draftWarned = true;
+      toast(quota
+        ? '⚠️ 저장 공간이 부족해 임시저장이 안 됩니다. 제출을 마친 점검이 있으면 먼저 전송해 주세요.'
+        : '⚠️ 임시저장에 실패했습니다. 작업을 마치면 바로 제출해 주세요.', 6000);
+    }
+  }
+}
+let _draftWarned = false;
+
+/**
+ * 저장소 사용량 조회 (진단용)
+ */
+async function getStorageInfo() {
+  try {
+    if (!navigator.storage || !navigator.storage.estimate) return null;
+    const e = await navigator.storage.estimate();
+    return { usage: e.usage || 0, quota: e.quota || 0 };
+  } catch (_) { return null; }
+}
+
+/**
+ * 오래된 임시저장 정리
+ *  제출하지 않고 넘어간 발전소의 초안이 계속 쌓이는 것을 막습니다.
+ *  기본 7일 — 그보다 오래된 작성 중 기록은 실효성이 없다고 봅니다.
+ */
+async function cleanupOldDrafts(days) {
+  const limit = Date.now() - (days || 7) * 24 * 60 * 60 * 1000;
+  try {
+    const all = (await withIdb(db => new Promise(res => {
+      const req = db.transaction(IDB_DRAFT, 'readonly').objectStore(IDB_DRAFT).getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => res([]);
+    }))) || [];
+    const old = all.filter(d => (d.savedAt || 0) < limit);
+    if (!old.length) return 0;
+    await withIdb(db => new Promise(res => {
+      const tx = db.transaction(IDB_DRAFT, 'readwrite');
+      old.forEach(d => tx.objectStore(IDB_DRAFT).delete(d.no));
+      tx.oncomplete = res; tx.onerror = res;
+    }));
+    console.log(`오래된 임시저장 ${old.length}건 정리`);
+    return old.length;
+  } catch (_) { return 0; }
+}
+
+function scheduleDraftSave() {
+  clearTimeout(_draftTimer);
+  _draftTimer = setTimeout(saveDraftNow, DRAFT_DEBOUNCE);
+}
+
+async function loadDraft(no) {
+  if (!no) return null;
+  try {
+    return await withIdb(db => new Promise(res => {
+      const req = db.transaction(IDB_DRAFT, 'readonly').objectStore(IDB_DRAFT).get(String(no));
+      req.onsuccess = () => res(req.result || null);
+      req.onerror = () => res(null);
+    }));
+  } catch (_) { return null; }
+}
+
+async function deleteDraft(no) {
+  if (!no) return;
+  try {
+    await withIdb(db => new Promise(res => {
+      const tx = db.transaction(IDB_DRAFT, 'readwrite');
+      tx.objectStore(IDB_DRAFT).delete(String(no));
+      tx.oncomplete = res; tx.onerror = res;
+    }));
+  } catch (_) {}
+}
+
+// 입력이 바뀔 때마다 예약 저장 (점검폼 안에서만)
+document.addEventListener('input', function(e) {
+  if (e.target && e.target.closest && e.target.closest('#mt-form')) scheduleDraftSave();
+});
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.closest && e.target.closest('#mt-form')) scheduleDraftSave();
+});
+// 백그라운드 전환·이탈 시에는 기다리지 않고 즉시 저장 (가장 중요한 시점)
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'hidden') saveDraftNow();
+});
+window.addEventListener('pagehide', function() { saveDraftNow(); });
+window.addEventListener('online',  () => {
+  S.isOnline=true;
+  document.getElementById('offBdg').style.display='none';
+  checkQueue();
+  autoFlushSubmits();  // 연결 복구 시 대기 제출 자동 전송
+});
+window.addEventListener('offline', () => { S.isOnline=false; document.getElementById('offBdg').style.display=''; });
+
+// ── 오프라인 제출 대기함 ──
+async function saveSubmitToQueue(payload) {
+  try {
+    return await withIdb(db => new Promise((res) => {
+      const tx = db.transaction(IDB_SUBMIT, 'readwrite');
+      tx.objectStore(IDB_SUBMIT).add({ payload, createdAt: Date.now() });
+      tx.oncomplete = () => res(true);
+      tx.onerror = () => res(false);
+    }));
+  } catch (_) { return false; }
+}
+
+let _flushing = false;
+
+/**
+ * 대기함에 쌓인 점검을 서버로 전송합니다.
+ * @param {boolean} quiet  true면 토스트를 띄우지 않음 (제출 버튼이 직접 결과를 표시할 때)
+ * @return {Object} { ok, fail, photoOk, photoFail, lastInspId, error, skipped }
+ *
+ * ⚠️ 이전에는 결과를 아무것도 돌려주지 않아, 제출이 실패해도 사용자가 알 수 없었습니다. (H-12)
+ */
+async function autoFlushSubmits(quiet) {
+  const R = { ok: 0, fail: 0, photoOk: 0, photoFail: 0, lastInspId: '', error: '', skipped: false };
+  if (_flushing) { R.skipped = true; return R; }
+  if (!S.isOnline) { R.skipped = true; R.error = '오프라인'; return R; }
+
+  _flushing = true;
+  try {
+    const items = (await withIdb(db => new Promise(res => {
+      const req = db.transaction(IDB_SUBMIT, 'readonly').objectStore(IDB_SUBMIT).getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => res([]);
+    }))) || [];
+    if (!items.length) return R;
+    if (!quiet) toast(`📡 대기 중이던 점검 ${items.length}건 전송 중...`);
+
+    // 큐 항목 갱신 헬퍼 — 진행 상태를 그때그때 기록해 둡니다
+    const saveItem = (it) => withIdb(db => new Promise(res => {
+      const tx = db.transaction(IDB_SUBMIT, 'readwrite');
+      tx.objectStore(IDB_SUBMIT).put(it);
+      tx.oncomplete = res; tx.onerror = res;
+    }));
+    const dropItem = (id) => withIdb(db => new Promise(res => {
+      const tx = db.transaction(IDB_SUBMIT, 'readwrite');
+      tx.objectStore(IDB_SUBMIT).delete(id);
+      tx.oncomplete = res; tx.onerror = res;
+    }));
+
+    for (const item of items) {
+      try {
+        const p = item.payload;
+
+        // ── 1) 점검 기록 전송 ──
+        // 이미 전송된 건이면 건너뜁니다. 사진 업로드 도중 앱이 죽어도
+        // 재시도할 때 같은 점검이 두 번 기록되지 않게 하는 장치입니다.
+        let inspId = p.submittedId || '';
+        if (!inspId) {
+          const r = await api('submitInspection', p.data);
+          if (!r || !r.success) {
+            R.fail++;
+            R.error = (r && r.error) || '서버 응답 없음';
+            continue;
+          }
+          inspId = r.inspId;
+          p.submittedId = inspId;
+          item.payload = p;
+          await saveItem(item);   // ← 전송 성공을 곧바로 기록
+        }
+        R.lastInspId = inspId || R.lastInspId;
+
+        // ── 2) 사진 업로드 (실패한 것만 큐에 남깁니다) ──
+        const photos = p.photos || [];
+        const remain = [];
+        for (const ph of photos) {
+          ph.inspId    = inspId;
+          ph.설비명칭  = ph.설비명칭 || p.data?.설비명칭 || '미지정';
+          ph.no        = ph.no || p.data?.no || '';
+          ph.uploader  = ph.uploader || p.data?.점검자 || S.user?.name || '';
+          ph.itemName  = ph.itemName || ph.label || ph.itemId || '점검사진';
+          const pr = await api('uploadPhoto', ph);
+          if (pr && pr.success) R.photoOk++;
+          else { R.photoFail++; remain.push(ph); }
+        }
+
+        if (remain.length) {
+          // 점검은 기록됐고 사진 일부만 남았습니다 → 사진만 다음에 재시도
+          p.photos = remain;
+          item.payload = p;
+          await saveItem(item);
+          R.fail++;
+          R.error = `사진 ${remain.length}장 업로드 실패`;
+        } else {
+          await dropItem(item.id);
+          R.ok++;
+        }
+      } catch (e) {
+        R.fail++;
+        R.error = e && e.message ? e.message : String(e);
+        console.warn('자동 제출 실패(재시도 예정)', e);
+      }
+    }
+
+    if (!quiet && R.ok > 0) toast(`✅ 대기 점검 ${R.ok}건 전송 완료`);
+    await checkQueue();
+    return R;
+  } finally {
+    _flushing = false;
+  }
+}
+async function appInit() {
+  try { await initIDB(); } catch(e) { console.warn('IDB init fail', e); }
+  cleanupOldDrafts(7);   // 오래된 임시저장 정리 (기다리지 않음)
+  if (!S.isOnline) document.getElementById('offBdg').style.display='';
+  try {
+    const token = (typeof INJECTED_TOKEN !== 'undefined' && INJECTED_TOKEN)
+      ? INJECTED_TOKEN
+      : (new URLSearchParams(location.search).get('token') || '');
+    if (token) {
+      const r = await api('loginByToken', {token});
+      if (r?.success) { await afterLogin(r); return; }
+    }
+  } catch(e) { console.warn('Token login fail', e); }
+
+  document.getElementById('loginWrap').style.display = '';
+  try { await checkQueue(); } catch(e) { console.warn('checkQueue fail', e); }
+}
+let _appInitDone = false;
+async function appInitOnce() {
+  if (_appInitDone) return;
+  _appInitDone = true;
+  await appInit();
+}
+window.onload = appInitOnce;
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  appInitOnce();
+} else {
+  document.addEventListener('DOMContentLoaded', appInitOnce);
+}
+
+async function checkQueue() {
+  let cnt = 0;
+  try {
+    cnt = (await withIdb(db => new Promise(res => {
+      const req = db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).count();
+      req.onsuccess = () => res(req.result || 0);
+      req.onerror = () => res(0);
+    }))) || 0;
+  } catch (_) { return; }
+  const bar = document.getElementById('queueBar');
+  if (cnt > 0) { document.getElementById('queueCnt').textContent=cnt; bar.classList.add('show'); }
+  else bar.classList.remove('show');
+}
+async function doLogin() {
+  const name = document.getElementById('loginName').value.trim();
+  if (!name) return toast('이름을 입력하세요');
+  const r = await api('login', {name});
+  if (r?.success) await afterLogin(r);
+  else toast('등록된 직원이 아닙니다');
+}
+
+async function afterLogin(r) {
+  S.user = r;
+  /* PWA 추가 — 다음에 앱을 켤 때 로그인 화면을 건너뛰기 위해 저장합니다.
+     주소창이 없는 설치형 앱에서는 ?token= 을 붙일 수 없기 때문입니다. */
+  try { if (r && r.token) localStorage.setItem('sky_token', r.token); } catch (_) {}
+  document.getElementById('loginWrap').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+  document.getElementById('hdUser').textContent = `${r.name} (${r.role})`;
+  if (r.role === '관리자') document.getElementById('tabAdmin').style.display = '';
+  await loadSites();
+  autoFlushSubmits();  // 로그인 직후 대기 제출 자동 전송
+}
+/**
+ * 발전소 목록 (H-1)
+ *  서버는 점검원에게 own 만, 관리자에게 own + all 을 줍니다.
+ *  예전에는 all 이 있으면 무조건 all 을 써서 관리자가 본인 담당만 볼 방법이 없었습니다.
+ *  이제 관리자에게는 「내 담당 / 전체」 토글을 제공하고 마지막 선택을 기억합니다.
+ */
+function applySiteView() {
+  const own = S.siteOwn || [], all = S.siteAll || [];
+  const list = (S.siteView === 'all' && all.length) ? all : own;
+  S.sites = list.length ? list : (all.length ? all : own);
+  renderSiteFilterBar();
+  renderSites(S.sites);
+}
+
+function setSiteView(v) {
+  S.siteView = v;
+  try { localStorage.setItem('siteView', v); } catch (_) {}
+  const box = document.getElementById('searchBox');
+  if (box) box.value = '';
+  applySiteView();
+}
+
+function renderSiteFilterBar() {
+  const el = document.getElementById('siteFilterBar');
+  if (!el) return;
+  const own = S.siteOwn || [], all = S.siteAll || [];
+  // 관리자(all 을 받은 경우)에게만 토글이 의미 있습니다
+  if (!all.length) { el.innerHTML = ''; return; }
+
+  const on  = 'background:var(--pri);color:#fff;border-color:var(--pri);';
+  const off = 'background:#fff;color:var(--pri);';
+  const base = 'flex:1;padding:.5rem;border:1.5px solid var(--border);border-radius:8px;'
+             + 'font-size:.85rem;font-weight:600;cursor:pointer;';
+  const isOwn = S.siteView !== 'all';
+  el.innerHTML =
+      '<div style="display:flex;gap:.4rem;margin-bottom:.6rem;">'
+    + '<button type="button" style="' + base + (isOwn ? on : off) + '" onclick="setSiteView(\'own\')">'
+    + '내 담당 ' + own.length + '</button>'
+    + '<button type="button" style="' + base + (isOwn ? off : on) + '" onclick="setSiteView(\'all\')">'
+    + '전체 ' + all.length + '</button>'
+    + '</div>';
+}
+
+async function loadSites() {
+  // 서버 응답 형태가 바뀌면 버전을 올려 옛 캐시를 버립니다 (위도·경도·전달사항 추가)
+  const cacheKey = 'siteCache_v3_' + (S.user?.name || '');
+
+  // 1) 캐시 먼저 즉시 표시 (재방문 시 체감속도 향상)
+  try {
+    const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+    if (cached && (cached.own || cached.all)) {
+      S.siteOwn = cached.own || [];
+      S.siteAll = cached.all || [];
+      S.siteView = localStorage.getItem('siteView') || (S.siteOwn.length ? 'own' : 'all');
+      applySiteView();
+    }
+  } catch (_) {}
+
+  // 2) 서버 갱신
+  const r = await api('getSiteList', { staffName: S.user?.name });
+  if (!r) return;
+  S.siteOwn = r.own || [];
+  S.siteAll = r.all || [];
+  if (!S.siteOwn.length && !S.siteAll.length) return;
+
+  // 담당 발전소가 없으면 전체 보기로 시작 (관리자가 아니면 전체도 비어 있습니다)
+  const saved = localStorage.getItem('siteView');
+  S.siteView = (saved === 'all' || !S.siteOwn.length) ? 'all' : 'own';
+
+  applySiteView();
+  try { localStorage.setItem(cacheKey, JSON.stringify({ own: S.siteOwn, all: S.siteAll })); } catch (_) {}
+}
+
+function renderSites(list) {
+  const el = document.getElementById('siteListEl');
+  if (!list || !list.length) {
+    // 담당 발전소가 아예 없는 경우와 검색 결과가 없는 경우를 구분해 안내합니다
+    const msg = (S.siteOwn && !S.siteOwn.length && S.siteView !== 'all')
+      ? '담당으로 지정된 발전소가 없습니다.<br><span style="font-size:.82rem;">관리자에게 문의하세요.</span>'
+      : '발전소 없음';
+    el.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted);line-height:1.6;">' + msg + '</div>';
+    return;
+  }
+  el.innerHTML = list.map(s => `
+    <div class="site-item" onclick="openSite('${s.no}')">
+      <div>
+        <div class="site-name">${s.name}</div>
+        <div class="site-meta">${s.설비구분||''} · ${s.capacity||''}kW</div>
+        <div class="site-addr">📍 ${s.설비위치||s.시군||'-'}</div>
+      </div>
+      <span class="badge">${s.manager||''}</span>
+    </div>`).join('');
+}
+
+function filterSites(kw) {
+  renderSites(S.sites.filter(s =>
+    (s.name||'').includes(kw)||(s.설비위치||'').includes(kw)||(s.manager||'').includes(kw)));
+}
+async function openSite(no) {
+  const site = S.sites.find(s => s.no == no);
+  if (!site) return;
+  S.currentSite = site;
+  S.currentEquip = null;
+  S.photoMap = {};
+  S.extraTypesShown = [];
+  S.editing = null;              // 수정 모드 해제
+  S.siteInspections = [];        // 이번 달 제출 목록 (회차 선택용)
+  S.pendingDraft = null;         // 작성 중이던 초안
+  S.emergencyMode = false;       // 긴급출동 모드 해제
+  S.lastFormMode = null;
+
+  // ⚠️ 이전 발전소의 점검폼을 반드시 비웁니다.
+  //    switchMTab()은 formEl이 비어 있을 때만 다시 그리기 때문에,
+  //    안 비우면 다른 발전소를 열어도 앞서 열었던 폼이 그대로 보입니다.
+  const prevForm = document.getElementById('formEl');
+  if (prevForm) prevForm.innerHTML = '';
+  const prevBanner = document.getElementById('pendingBannerEl');
+  if (prevBanner) prevBanner.innerHTML = '';
+  currentInspType = '월차점검';
+  S.inspTypes = ['월차점검'];
+  if (typeof restoreOfflineQueueForSite === 'function') {
+    await restoreOfflineQueueForSite(no);
+  }
+
+  // 출입비번 끝의 '/' 정리 ("1234/" → "1234"). 중간 '/'는 그대로 둠 ("0000/0710")
+  var cleanPasscode = String(site.출입비번 || '-').replace(/\/+$/, '').trim();
+  var addrStr = site.설비위치 || site.시군 || '-';
+  var siteNo  = site.no;
+
+  // ⚠️ 중첩 템플릿 리터럴(${cond ? `...` : ''})을 쓰지 않습니다.
+  //    GAS 아이프레임 샌드박스에서 페이지가 통째로 렌더되지 않는 문제가 있었습니다.
+  //    버튼 HTML은 미리 문자열로 조립해 두고 한 번만 끼워 넣습니다.
+  var btnStyle  = 'border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;';
+  var copyBtn   = '<button type="button" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;' + btnStyle
+                + '" onclick="copyAddressByNo(event, \'' + siteNo + '\')">&#128203; 주소 복사</button>';
+  var naviBtn   = '<button type="button" style="background:#2563eb;color:#fff;border:none;' + btnStyle
+                + '" onclick="autoOpenNaviByNo(event, \'' + siteNo + '\')">&#129517; 네비안내</button>';
+  var passBtn   = '';
+  if (cleanPasscode !== '-') {
+    passBtn = '<button type="button" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;'
+            + 'border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;margin-left:10px;'
+            + '" onclick="copyPasscodeByNo(event, \'' + siteNo + '\')">&#128273; 비번 복사</button>';
+  }
+
+  var tdKey = 'padding:.45rem .2rem;color:var(--muted);width:75px;vertical-align:top;';
+  var tdVal = 'padding:.45rem .2rem;font-weight:500;color:#334155;';
+
+  // 모달 즉시 표시 (기본정보는 site 데이터로 바로 렌더)
+  document.getElementById('modalTitle').textContent = site.name;
+  document.getElementById('siteInfoEl').innerHTML =
+      '<table style="width:100%;border-collapse:collapse;font-size:.88rem;">'
+    + '<tr><td style="' + tdKey + '">발전소명</td>'
+    + '<td style="padding:.45rem .2rem;font-weight:700;color:#0f172a;">' + site.name + '</td></tr>'
+    + '<tr><td style="' + tdKey + '">용량</td>'
+    + '<td style="' + tdVal + '">' + ((site.capacity || '-') + 'kW') + '</td></tr>'
+    + '<tr><td style="' + tdKey + '">위치</td>'
+    + '<td style="' + tdVal + 'line-height:1.4;">' + addrStr
+    + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">' + copyBtn + naviBtn + '</div>'
+    + '</td></tr>'
+    + '<tr><td style="' + tdKey + '">출입비번</td>'
+    + '<td style="padding:.45rem .2rem;">'
+    + '<span style="color:#2563eb;font-weight:800;font-size:1.05rem;">' + cleanPasscode + '</span>'
+    + passBtn
+    + '</td></tr>'
+    + '<tr><td style="' + tdKey + '">점검회차</td>'
+    + '<td style="' + tdVal + '"><div id="seqPickRow">' + ((site.점검회차 || '-') + '회/월') + '</div></td></tr>'
+    + '</table>';
+  document.getElementById('inspModal').classList.add('show');
+  document.body.style.overflow = 'hidden';
+  switchMTab('info');
+
+  // 작성 중이던 초안이 있으면 안내 (제출 대기 건이 있으면 그쪽이 우선)
+  if (!S.pendingData) {
+    loadDraft(siteNo).then(dr => {
+      if (!dr || !dr.data) return;
+      S.pendingDraft = dr;
+      renderDraftBanner(dr);
+    });
+  }
+
+  // 설비정보/미결사항/전달사항은 백그라운드 병렬 로드
+  S.equipReady = api('getEquipInfo', {no}).then(equip => {
+    S.currentEquip = equip;
+    // 이미 점검폼이 열려 있으면 채널 반영 위해 다시 그림
+    if (document.getElementById('mt-form')?.classList.contains('active')
+        && document.getElementById('formEl').innerHTML) {
+      buildForm(currentInspType);
+    }
+    return equip;
+  });
+  api('getPendingFaults', {no}).then(faults => renderPendingBanner(faults || []));
+
+  // 이번 달 제출 목록 → 회차 선택 / 수정 버튼
+  api('getSiteInspections', {no: siteNo}).then(list => {
+    S.siteInspections = Array.isArray(list) ? list : [];
+    renderSeqPicker(site);
+    // 목록을 받은 뒤 회차와 전월송전전력을 다시 계산합니다
+    if (typeof calcSeq === 'function') calcSeq();
+    if (typeof autoFillPrevPower === 'function') autoFillPrevPower();
+  });
+
+  showNoticeIfAny(site);
+  if (typeof prefetchCheckItems === "function") prefetchCheckItems(site);
+}
+
+// ── 점검회차 표시 + 회차 선택 + 수정 진입 ─────────────────
+function renderSeqPicker(site) {
+  const el = document.getElementById('seqPickRow');
+  if (!el) return;
+  const total = (site.점검회차 || '-') + '회/월';
+  const list = S.siteInspections || [];
+
+  if (!list.length) {
+    el.innerHTML = total + ' <span style="color:var(--muted);font-size:.8rem;">· 이번 달 제출 이력 없음</span>';
+    return;
+  }
+
+  let opts = '';
+  for (let i = 0; i < list.length; i++) {
+    const it = list[i];
+    opts += '<option value="' + it.inspId + '">'
+          + it.seq + '회차 · ' + (it.점검일자 || '')
+          + (it.수정일시 ? ' (수정됨)' : '')
+          + '</option>';
+  }
+
+  el.innerHTML = total
+    + '<div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap;">'
+    + '<select id="seqSelect" style="flex:1;min-width:140px;height:32px;padding:4px 8px;font-size:12px;">' + opts + '</select>'
+    + '<button type="button" onclick="startEditInspection()" '
+    + 'style="background:#fff7ed;color:#b45309;border:1px solid #fed7aa;border-radius:6px;'
+    + 'padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;height:32px;white-space:nowrap;">✏️ 수정</button>'
+    + '</div>';
+}
+
+/**
+ * 제출된 점검을 불러와 수정 모드로 진입합니다.
+ * 순서가 중요합니다 — 폼을 "먼저 다 그린 뒤"에 값을 채워야 합니다.
+ */
+async function startEditInspection() {
+  const sel = document.getElementById('seqSelect');
+  if (!sel || !sel.value) return;
+  if (!S.isOnline) { toast('수정은 온라인에서만 가능합니다.'); return; }
+
+  toast('점검 기록을 불러오는 중...');
+  const r = await api('getInspection', { inspId: sel.value });
+  if (!r || !r.success) { toast((r && r.error) || '불러오기에 실패했습니다.'); return; }
+
+  S.editing = r;
+  S.photoMap = {};   // 수정 중 새로 추가하는 사진만 담습니다
+
+  // 점검구분은 '월차점검+기록+측정' 처럼 결합 문자열로 저장됩니다.
+  // ⚠️ buildForm()은 점검구분을 하나만 받습니다. 결합 문자열을 그대로 넘기면
+  //    어느 것과도 매칭되지 않아 기록·측정 아코디언이 아예 렌더링되지 않습니다.
+  //    → 첫 구분으로 폼을 만든 뒤, 나머지는 selectInspType()으로 하나씩 추가합니다.
+  const types = String(r.점검구분 || '월차점검')
+    .split('+').map(s => s.trim()).filter(Boolean);
+  if (!types.length) types.push('월차점검');
+
+  // 분기/반기점검은 기본으로 숨겨져 있으므로 미리 표시 대상에 넣습니다
+  S.extraTypesShown = types.filter(t => t === '분기점검' || t === '반기점검');
+
+  // 1) 폼을 비우고 첫 점검구분으로 뼈대 생성 (완료까지 대기)
+  const formEl = document.getElementById('formEl');
+  if (formEl) formEl.innerHTML = '';
+  currentInspType = types[0];
+  S.inspTypes = [types[0]];
+  await buildForm(types[0]);
+
+  // 2) 나머지 점검구분을 추가 선택해 항목을 병합 렌더
+  for (let i = 1; i < types.length; i++) {
+    await selectInspType(types[i]);
+  }
+
+  // 3) 값 채우기
+  fillFormFromInspection(r);
+
+  // 4) 폼 탭으로 전환 (formEl에 내용이 있으므로 재빌드되지 않습니다)
+  switchMTab('form');
+}
+
+function fillFormFromInspection(r) {
+  const missed = applyFormValues(r);
+  markEditMode(r, missed);
+}
+
+/**
+ * 폼에 값을 채웁니다. 서버에서 불러온 기록과 임시저장 초안 모두 같은 형태라 공용입니다.
+ * @return {Array} 화면에 대응 칸이 없어 복원하지 못한 항목ID 목록
+ */
+function applyFormValues(r) {
+  const setV = (id, v) => {
+    const el = document.getElementById(id);
+    if (el && v !== undefined && v !== null && v !== '') el.value = v;
+  };
+
+  setV('f_date', r.점검일자);
+  setV('f_time', r.점검시각);
+  setV('f_weather', r.날씨);
+  setV('f_temp', r.기온);
+  setV('f_prev_power', r.전월송전전력);
+  setV('f_curr_power', r.현재송전전력);
+  setV('f_inv_kwh', r.인버터발전량);
+  setV('f_seq', r.점검회차현황);
+  setV('f_result', r.종합점검결과);
+  setV('f_action', r.조치구분);
+  setV('f_action_detail', r.조치내용);
+  setV('f_vendor', r.요청업체);
+  setV('f_note', r.특이사항);
+  if (typeof toggleAction === 'function') toggleAction(r.조치구분 || '없음');
+
+  // 채널 전류 — 시트 컬럼은 slot(No번호), 화면 id는 배열 인덱스 (N-1)
+  const equip = S.currentEquip || {};
+  (equip.channels || []).forEach((ch, i) => {
+    const v = (r.channels || {})['No' + (ch.slot || i + 1)];
+    if (v) setV('ch_' + i, v);
+  });
+
+  // 변압기 온도 — 1대는 단일 칸, 여러 대는 "/" 묶음
+  const trs = [];
+  for (let t = 1; t <= 5; t++) {
+    const v = (r.items || {})['tr_temp_' + t];
+    if (v) trs.push(v);
+  }
+  if (trs.length === 1) setV('tr_temp_1', trs[0]);
+  else if (trs.length > 1) setV('tr_temp_multi', trs.join('/'));
+
+  // 3상·숫자반복 항목은 기본으로 1호기 칸만 그려집니다.
+  // 저장된 데이터에 2호기 이상이 있으면 받을 칸이 없어 유실되므로 먼저 늘려둡니다.
+  Object.keys(r.items || {}).forEach(k => {
+    const m = k.match(/^(.+)_(\d+)$/);
+    if (!m) return;
+    const base = m[1], n = parseInt(m[2], 10);
+    if (base === 'tr_temp' || !n) return;
+
+    const phWrap = document.getElementById('ph_wrap_' + base);
+    if (phWrap && typeof renderPhaseSet === 'function') {
+      while (phWrap.querySelectorAll('.ph-set').length < n) {
+        const next = phWrap.querySelectorAll('.ph-set').length + 1;
+        phWrap.insertAdjacentHTML('beforeend', renderPhaseSet(base, next, ''));
+      }
+      return;
+    }
+    const numWrap = document.getElementById('num_wrap_' + base);
+    if (numWrap && typeof renderNumSet === 'function') {
+      while (numWrap.querySelectorAll('.num-set').length < n) {
+        const next = numWrap.querySelectorAll('.num-set').length + 1;
+        numWrap.insertAdjacentHTML('beforeend', renderNumSet(base, next, ''));
+      }
+    }
+  });
+
+  // ── C-1: 한 열에 묶인 호기·접속반별 값을 각 칸으로 되돌립니다 ──
+  //  저장 형태: "1호기값 | 2호기값 | …"  (3상 내부는 "/" 유지)
+  const MULTI_TYPES = ['3상', '숫자반복', '채널반복'];
+  const packedKeys = {};
+  (S.checkItems || [])
+    .filter(it => MULTI_TYPES.indexOf(it.입력유형) >= 0)
+    .forEach(it => {
+      const base = it.항목ID;
+      const packed = (r.items || {})[base];
+      if (!packed) return;
+      packedKeys[base] = true;
+
+      const parts = String(packed).split('|').map(s => s.trim());
+
+      // 저장된 개수만큼 입력칸을 먼저 늘립니다
+      const phWrap  = document.getElementById('ph_wrap_' + base);
+      const numWrap = document.getElementById('num_wrap_' + base);
+      if (phWrap && typeof renderPhaseSet === 'function') {
+        while (phWrap.querySelectorAll('.ph-set').length < parts.length) {
+          const next = phWrap.querySelectorAll('.ph-set').length + 1;
+          phWrap.insertAdjacentHTML('beforeend', renderPhaseSet(base, next, ''));
+        }
+      } else if (numWrap && typeof renderNumSet === 'function') {
+        while (numWrap.querySelectorAll('.num-set').length < parts.length) {
+          const next = numWrap.querySelectorAll('.num-set').length + 1;
+          numWrap.insertAdjacentHTML('beforeend', renderNumSet(base, next, ''));
+        }
+      }
+
+      parts.forEach((v, idx) => setV('item_' + base + '_' + (idx + 1), v));
+    });
+
+  // 나머지 점검항목 (O/X 는 버튼 하이라이트까지 복원)
+  let filled = 0, missed = [];
+  Object.keys(r.items || {}).forEach(k => {
+    if (/^tr_temp_\d+$/.test(k)) return;
+    if (packedKeys[k]) return;              // 위에서 이미 풀어 넣었습니다 (C-1)
+    const el = document.getElementById('item_' + k);
+    if (!el) { missed.push(k); return; }
+    el.value = r.items[k];
+    if (el.type === 'hidden' && typeof setOX === 'function') setOX('item_' + k, r.items[k]);
+    filled++;
+  });
+  if (missed.length) console.warn('복원하지 못한 항목:', missed);
+  return missed;
+}
+
+// ── 점검 시작 / 긴급출동 ─────────────────────────────────
+// 긴급출동은 정기점검과 성격이 다릅니다. 기록·측정을 하지 않으므로
+// 점검폼 아코디언에 섞지 않고 기본정보 화면에서 별도로 진입합니다.
+
+async function startInspection() {
+  S.emergencyMode = false;
+  const formEl = document.getElementById('formEl');
+  // 긴급출동 폼이 열려 있었다면 비우고 다시 그립니다
+  if (formEl && S.lastFormMode === 'emergency') formEl.innerHTML = '';
+  S.lastFormMode = 'normal';
+  switchMTab('form');
+}
+
+async function startEmergency() {
+  S.emergencyMode = true;
+  S.lastFormMode = 'emergency';
+  S.editing = null;
+  S.extraTypesShown = [];
+  S.inspTypes = ['긴급출동'];
+  currentInspType = '긴급출동';
+
+  const formEl = document.getElementById('formEl');
+  if (formEl) formEl.innerHTML = '';
+  await buildForm('긴급출동');
+  toast('🚨 긴급출동 모드 — 기록·측정 항목은 표시되지 않습니다');
+  switchMTab('form');
+}
+
+/**
+ * 임시저장 초안 이어서 작성
+ */
+async function resumeDraft() {
+  const dr = S.pendingDraft;
+  if (!dr) return;
+  S.pendingDraft = null;
+  S.editing = null;
+
+  const types = (dr.inspTypes && dr.inspTypes.length) ? dr.inspTypes : ['월차점검'];
+  S.extraTypesShown = dr.extraTypesShown || [];
+  S.photoMap = dr.photos || {};
+
+  const formEl = document.getElementById('formEl');
+  if (formEl) formEl.innerHTML = '';
+  currentInspType = types[0];
+  S.inspTypes = [types[0]];
+  await buildForm(types[0]);
+  for (let i = 1; i < types.length; i++) await selectInspType(types[i]);
+
+  applyFormValues(dr.data || {});
+
+  // 사진 매수 배지 갱신
+  Object.keys(S.photoMap || {}).forEach(k => {
+    if (typeof updatePhotoCount === 'function') updatePhotoCount(k);
+  });
+
+  toast('📝 작성 중이던 내용을 불러왔습니다.');
+  switchMTab('form');
+}
+
+/**
+ * 초안 버리고 새로 작성
+ */
+async function discardDraft() {
+  const dr = S.pendingDraft;
+  S.pendingDraft = null;
+  if (dr && dr.no) await deleteDraft(dr.no);
+  const el = document.getElementById('draftBanner');
+  if (el) el.remove();
+  S.photoMap = {};
+  toast('새로 작성합니다.');
+}
+
+// 기본정보 화면에 「이어서 작성」 안내 표시
+function renderDraftBanner(dr) {
+  const host = document.getElementById('siteInfoEl');
+  if (!host || !dr) return;
+  const old = document.getElementById('draftBanner');
+  if (old) old.remove();
+
+  const when = new Date(dr.savedAt || Date.now());
+  const ts = `${when.getMonth() + 1}/${when.getDate()} ${String(when.getHours()).padStart(2,'0')}:${String(when.getMinutes()).padStart(2,'0')}`;
+  const photoCnt = Object.keys(dr.photos || {}).reduce((a, k) => a + (dr.photos[k] || []).length, 0);
+
+  const html =
+      '<div id="draftBanner" style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:.75rem .9rem;margin-bottom:.6rem;">'
+    + '<div style="font-weight:700;color:#1d4ed8;font-size:.9rem;">📝 작성 중이던 점검이 있습니다</div>'
+    + '<div style="font-size:.82rem;color:#1e3a8a;margin-top:.3rem;">'
+    + ts + ' 저장' + (photoCnt ? ' · 사진 ' + photoCnt + '장' : '') + '</div>'
+    + '<div style="display:flex;gap:.4rem;margin-top:.6rem;">'
+    + '<button type="button" class="btn btn-pri btn-sm" style="flex:1;" onclick="resumeDraft()">이어서 작성</button>'
+    + '<button type="button" class="btn btn-out btn-sm" style="flex:1;" onclick="discardDraft()">새로 작성</button>'
+    + '</div></div>';
+  host.insertAdjacentHTML('afterbegin', html);
+}
+
+function markEditMode(r, missed) {
+  const btn = document.querySelector('#mt-form .btn-ok');
+  if (btn) btn.innerHTML = '💾 수정 저장';
+
+  const form = document.getElementById('formEl');
+  if (!form) return;
+
+  // 화면에 대응 칸이 없어 복원하지 못한 항목이 있으면 알려줍니다.
+  // (점검항목관리 시트에서 항목이 삭제됐거나 사용여부가 N으로 바뀐 경우 등)
+  let warn = '';
+  if (missed && missed.length) {
+    warn = '<div style="margin-top:.5rem;padding:.5rem .6rem;background:#fef2f2;border:1px solid #fecaca;'
+         + 'border-radius:8px;font-size:.78rem;color:#991b1b;line-height:1.45;">'
+         + '⚠️ 화면에 없는 항목 ' + missed.length + '건은 표시되지 않았습니다. '
+         + '저장하면 <b>기존 값이 유지</b>됩니다.<br>' + missed.join(', ')
+         + '</div>';
+  }
+
+  const banner =
+      '<div id="editModeBanner" style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:.7rem .9rem;margin-bottom:.7rem;">'
+    + '<div style="font-weight:700;color:#b45309;font-size:.9rem;">✏️ 수정 모드 · ' + (r.inspId || '') + '</div>'
+    + '<div style="font-size:.82rem;color:#78350f;margin-top:.35rem;line-height:1.5;">'
+    + '기존 기록을 덮어씁니다. 사진은 <b>추가만</b> 되며 이미 올린 사진은 그대로 유지됩니다.</div>'
+    + warn
+    + '<button type="button" class="btn btn-out btn-sm" style="margin-top:.5rem;" onclick="cancelEditMode()">수정 취소</button>'
+    + '</div>';
+  form.insertAdjacentHTML('afterbegin', banner);
+}
+
+async function cancelEditMode() {
+  S.editing = null;
+  S.photoMap = {};
+  const formEl = document.getElementById('formEl');
+  if (formEl) formEl.innerHTML = '';
+  currentInspType = '월차점검';
+  S.inspTypes = ['월차점검'];
+  toast('수정을 취소했습니다.');
+  switchMTab('info');
+}
+// 전달사항 확인 여부 — 공지 저장시각(savedAt)을 키로 삼아
+// "새 공지가 올라오면 다시 뜨고, 확인한 공지는 안 뜨게" 합니다. (H-7)
+function isNoticeAcked(key) {
+  if (!key) return false;
+  try { return !!localStorage.getItem('noticeAck_' + key); } catch (_) { return false; }
+}
+
+// 문자열을 짧은 지문으로 (수용가별 전달사항의 확인 키 생성용)
+function hashText(s) {
+  let h = 0;
+  const t = String(s || '');
+  for (let i = 0; i < t.length; i++) { h = ((h << 5) - h) + t.charCodeAt(i); h |= 0; }
+  return String(h);
+}
+
+function fmtNoticeDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}.`;
+}
+
+/**
+ * 전달사항 표시 (H-6, H-7)
+ *  ⚠️ 예전에는 공통 전달사항을 localStorage 에서 읽었습니다.
+ *     관리자가 저장한 공지가 그 사람 휴대폰에만 남고 다른 점검원에게는
+ *     한 번도 표시되지 않았습니다. 이제 서버 응답이 정본입니다.
+ *  ⚠️ 서버는 { common, site } 를 주는데 화면은 r.notice 를 읽고 있어
+ *     수용가별 전달사항도 항상 없음 처리됐습니다.
+ */
+async function showNoticeIfAny(site) {
+  const r = await api('getNotice', { no: site.no });
+  const notices = [];
+
+  const common = r && r.common;
+  if (common && common.text) {
+    // 만료일은 그날 자정까지 유효한 것으로 봅니다
+    const exp = common.expiry ? new Date(common.expiry + 'T23:59:59') : null;
+    if ((!exp || exp >= new Date()) && !isNoticeAcked(common.savedAt)) {
+      notices.push({
+        type: 'common', level: common.level || '일반', text: common.text,
+        date: fmtNoticeDate(common.savedAt), key: common.savedAt
+      });
+    }
+  }
+
+  // 수용가별 전달사항 — 수용가관리대장 Z열 (C-4)
+  //  확인(ack) 키는 내용을 해시해서 만듭니다. 관리자가 문구를 고치면
+  //  키가 바뀌어 이미 확인한 사람에게도 다시 표시됩니다.
+  const siteText = String((site && site.전달사항) || '').trim();
+  if (siteText) {
+    const key = 'site-' + site.no + '-' + hashText(siteText);
+    if (!isNoticeAcked(key)) {
+      notices.push({ type: 'site', level: '일반', text: siteText, date: '', key: key });
+    }
+  }
+
+  if (!notices.length) return;
+  S.noticeKeys = notices.map(n => n.key).filter(Boolean);
+  document.getElementById('noticeSiteName').textContent = site.name;
+  const body = document.getElementById('noticeBody');
+  body.innerHTML = notices.map(n => {
+    const typeLabel = n.type === 'common' ? '📢 공통 전달사항' : '🏭 수용가별 전달사항';
+    const typeClass = n.type === 'common' ? 'common' : 'site';
+    const levelBadge = n.level !== '일반'
+      ? `<span style="background:${n.level==='긴급'?'#fee2e2':'#fff7ed'};color:${n.level==='긴급'?'#dc2626':'#d97706'};
+              padding:1px 7px;border-radius:8px;font-size:.72rem;font-weight:700;margin-left:.4rem;">${n.level}</span>`
+      : '';
+    return `
+      <div class="notice-item ${typeClass}">
+        <div class="n-type">${typeLabel}${levelBadge}</div>
+        <div class="n-text">${n.text.replace(/\n/g,'<br>')}</div>
+        ${n.date ? `<div class="n-date">${n.date}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  document.getElementById('noticeModal').classList.add('show');
+}
+
+function confirmNotice() {
+  document.getElementById('noticeModal').classList.remove('show');
+  // 방금 보여준 공지들을 확인 처리 (H-7)
+  //  예전에는 발전소+날짜로 키를 만들어 저장만 하고 읽지는 않아서
+  //  발전소를 열 때마다 같은 공지가 계속 떴습니다.
+  try {
+    (S.noticeKeys || []).forEach(k => localStorage.setItem('noticeAck_' + k, new Date().toISOString()));
+  } catch (_) {}
+  S.noticeKeys = [];
+}
+
+/**
+ * 전달사항 「확인했습니다」 기록 초기화
+ *  한 번 확인한 공지는 다시 뜨지 않습니다(의도된 동작).
+ *  테스트하거나 다시 보고 싶을 때 이 기능으로 기록을 지웁니다.
+ */
+function resetNoticeAcks() {
+  try {
+    const del = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf('noticeAck_') === 0) del.push(k);
+    }
+    del.forEach(k => localStorage.removeItem(k));
+    toast(`전달사항 확인기록 ${del.length}건 초기화 — 발전소를 다시 열어보세요.`, 4000);
+  } catch (_) {
+    toast('초기화에 실패했습니다.');
+  }
+}
+
+// 서버에서 공통 전달사항을 읽어 관리자 화면에 표시
+async function loadCommonNotice() {
+  const r = await api('getNotice', {});
+  const c = (r && r.common) || null;
+  renderCommonNoticePreview(c);
+  return c;
+}
+
+async function saveCommonNotice() {
+  const text   = document.getElementById('commonNoticeInput')?.value.trim();
+  const expiry = document.getElementById('commonNoticeExpiry')?.value;
+  const level  = document.getElementById('commonNoticeLevel')?.value || '일반';
+  if (!text) return toast('전달사항 내용을 입력하세요');
+
+  // 저장은 서버(스크립트 속성)에만 합니다. localStorage에 두면 그 기기에서만 보입니다.
+  const r = await api('saveCommonNotice', { text, expiry, level });
+  if (!r || !r.success) { toast('저장에 실패했습니다. 다시 시도해 주세요.'); return; }
+
+  document.getElementById('commonNoticeInput').value = '';
+  await loadCommonNotice();   // 서버에 실제로 저장된 값을 다시 읽어 표시
+  toast(`📢 공통 전달사항 저장됨 (${level}) — 모든 점검원에게 표시됩니다`);
+}
+
+async function clearCommonNotice() {
+  if (!confirm('공통 전달사항을 삭제할까요?')) return;
+  const r = await api('saveCommonNotice', { text: '', cleared: true });
+  if (!r || !r.success) { toast('삭제에 실패했습니다.'); return; }
+  renderCommonNoticePreview(null);
+  toast('🗑 삭제됨');
+}
+
+function renderCommonNoticePreview(data) {
+  const el = document.getElementById('commonNoticePreview');
+  if (!el) return;
+  if (!data?.text) { el.innerHTML = '(없음)'; return; }
+  const levelColor = data.level==='긴급'?'#dc2626':data.level==='중요'?'#d97706':'#166534';
+  el.innerHTML = `
+    <span style="color:${levelColor};font-weight:700;">[${data.level}]</span>
+    ${data.text.replace(/\n/g,'<br>')}
+    <div style="color:var(--muted);font-size:.76rem;margin-top:.3rem;">
+      저장: ${data.savedAt||''}${data.expiry?' · 만료: '+data.expiry:''}
+    </div>`;
+}
+
+function closeModal() {
+  document.getElementById('inspModal').classList.remove('show');
+  document.body.style.overflow = '';
+  S.editing = null;   // 수정 모드가 다음 발전소로 새어나가지 않게 정리
+}
+function renderPendingBanner(faults) {
+  const el = document.getElementById('pendingBannerEl');
+  if (!faults.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div class="pending-banner">
+      <h3>⚠️ 전회차 미결사항 ${faults.length}건</h3>
+      ${faults.map(f => `
+        <div class="pending-item">
+          <div>[${f.발생일자}] ${f.장애내용}</div>
+          <div style="color:var(--muted);font-size:.8rem;">조치: ${f.조치구분} · 상태: ${f.완료여부}</div>
+          <div style="display:flex;gap:.4rem;margin-top:.3rem;">
+            <button class="btn btn-ok btn-sm" onclick="resolveFault('${f.faultId}','완료')">✅ 확인완료</button>
+            <button class="btn btn-out btn-sm" onclick="resolveFault('${f.faultId}','진행중')">🔄 처리중</button>
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+async function resolveFault(faultId, status) {
+  await api('updateFault', {faultId, 완료여부: status, 확인자: S.user?.name});
+  toast(status === '완료' ? '✅ 완료 처리됨' : '🔄 진행중으로 변경');
+  const faults = await api('getPendingFaults', {no: S.currentSite?.no});
+  renderPendingBanner(faults || []);
+}
+async function buildForm(inspType) {
+  const site   = S.currentSite;
+  // 설비정보 로딩이 끝나지 않았으면 대기 (측정 채널 표시에 필요)
+  if (!S.currentEquip && S.equipReady) { try { await S.equipReady; } catch(_) {} }
+  const equip  = S.currentEquip || {};
+  const today  = new Date().toISOString().split('T')[0];
+  const isLow  = (site.설비구분||'').includes('일반저압');
+  const isSub  = equip.변압기수량 > 0;
+  const items = await fetchCheckItems(site, inspType);
+  S.checkItems = items || [];
+
+  // ── 이 발전소에서 사용 가능한 점검구분 목록 미리 조회 (아코디언 표시 여부 결정) ──
+  //   전체 항목을 inspType 필터 없이 조회해서 존재하는 점검구분 수집
+  try {
+    const allItems = await fetchCheckItems(site, '');
+    const avail = {};
+    (allItems || []).forEach(it => { avail[it.점검구분] = true; });
+    // 월차점검/긴급출동/열화상촬영은 항상 표시 (하드코딩 폴백 존재)
+    avail['월차점검'] = true; avail['긴급출동'] = true; avail['열화상촬영'] = true;
+    // 측정은 채널 정보 또는 시트 항목이 있으면 표시
+    if (equip.channels?.length > 0) avail['측정'] = true;
+    S.availTypes = avail;
+  } catch(_) { S.availTypes = null; }
+  const sections = {};
+  S.checkItems.forEach(item => {
+    if (!sections[item.섹션]) sections[item.섹션] = [];
+    sections[item.섹션].push(item);
+  });
+
+  let html = '';
+  html += `<div class="card" style="background:#f0f4ff;font-size:.88rem;padding:.75rem 1rem;margin-bottom:.75rem;">
+    <div style="font-weight:700;">${site.name}</div>
+    <div style="color:var(--muted);margin-top:.2rem;font-size:.82rem;">📍 ${site.설비위치||'주소 미등록'}</div>
+  </div>`;
+  html += `
+  <div class="row2">
+    <div class="fg"><label>점검일자 *</label><input type="date" id="f_date" value="${today}"></div>
+    <div class="fg"><label>점검시각 *</label><input type="time" id="f_time" value="${new Date().toTimeString().slice(0,5)}"></div>
+  </div>
+  <div class="fg">
+    <label>점검회차 <span style="font-weight:400;color:var(--muted);font-size:.78rem;">제출 이력 기준 자동 계산 · 변경 가능</span></label>
+    <select id="f_seq"></select>
+  </div>
+  <div class="row2">
+    <div class="fg">
+      <label>날씨 <button class="btn btn-out btn-sm" onclick="autoWeather()" style="margin-left:.4rem;">🌤 자동조회</button></label>
+      <input type="text" id="f_weather" placeholder="맑음">
+    </div>
+    <div class="fg"><label>기온(°C)</label><input type="text" id="f_temp" inputmode="decimal" placeholder="25.0" oninput="handleSmartInput(this)"></div>
+  </div>
+  <div class="row2">
+    <div class="fg"><label>전월 송전전력<span style="font-weight:400;color:var(--muted);font-size:.75rem;">(발전용 전력량계)</span></label>
+      <input type="text" id="f_prev_power" inputmode="decimal" placeholder="kWh" oninput="handleSmartInput(this)">
+      <div id="prevPowerHint" style="font-size:.76rem;margin-top:.25rem;min-height:1rem;"></div>
+    </div>
+    <div class="fg"><label>현재 송전전력<span style="font-weight:400;color:var(--muted);font-size:.75rem;">(발전용 전력량계)</span></label><input type="text" id="f_curr_power" inputmode="decimal" placeholder="kWh" oninput="handleSmartInput(this)"></div>
+  </div>
+  <div id="invKwhSection"></div>
+
+<div id="trTempSection"></div>
+
+<div class="fg" style="margin-bottom:.3rem;">
+    <label>점검구분 * <span style="font-weight:400;color:var(--muted);font-size:.78rem;">항목을 탭하면 펼쳐집니다 · 복수 선택 가능</span></label>
+  </div>
+
+<div id="inspSectionWrap"></div>`;
+
+  document.getElementById('formEl').innerHTML = html;
+  calcSeq();
+  autoFillPrevPower();
+  renderInvKwhSection(equip);
+  renderTrTempSection(equip, isSub);
+  S.inspTypes = [inspType];  // 초기 선택 상태
+  // ⚠️ 예전에는 여기서 전송 대기 건(S.pendingData)을 폼에 덮어썼습니다.
+  //    다음 점검을 하려는데 이전 점검 내용이 나타나는 원인이었습니다.
+  //    「작성 중」 복원은 자동 임시저장(초안)이 담당합니다.
+  renderInspSection([inspType], site, equip, isLow, isSub, sections);
+}
+function renderInvKwhSection(equip) {
+  const el = document.getElementById('invKwhSection');
+  if (!el) return;
+  // 공통 섹션 누적발전량 표시 조건:
+  //  1) 센트럴 (L열 "센트럴"/"C"...) 또는
+  //  2) 접속반 있는 스트링 (L열 "S2" 또는 프로필에 P_S인버터2)
+  //  → 한 번에 "/" 구분 입력
+  const invType = String(equip.인버터구분||'').trim().toUpperCase();
+  const profile = String(S.currentSite?.측정프로필||'');
+  const isCentral = isCentralInv(invType);
+  // 'S2'는 실물 시트에 없는 값이므로 사실상 프로필(P_S인버터2)로만 판정됩니다 (N-3/N-4)
+  const isS2 = invType === 'S2' || profile.indexOf('P_S인버터2') >= 0;
+  if (!isCentral && !isS2) { el.innerHTML = ''; return; }
+  const cnt = equip.인버터수량 || 1;
+  el.innerHTML = `
+  <div class="fg">
+    <label>인버터 누적발전량 <span style="color:var(--pri);font-weight:700;">${cnt}대</span>
+      <span style="font-weight:400;color:var(--muted);font-size:.78rem;">/ 구분 입력 · space → / 자동 변환</span>
+    </label>
+    <div style="display:flex;gap:.4rem;align-items:center;">
+      <input type="text" id="f_inv_kwh" inputmode="decimal" pattern="[0-9\\s/\\.]+"
+             placeholder="${Array.from({length:Math.min(cnt,3)},(_,i)=>15234-i*300).join('/')}${cnt>3?'/...':''}"
+             style="flex:1;"
+             oninput="autoSlashKwh(this)" onblur="finalizeKwh(this)">
+
+    </div>
+    <div id="kwhPreview" style="font-size:.8rem;color:var(--muted);margin-top:.25rem;min-height:1rem;"></div>
+  </div>`;
+}
+function renderTrTempSection(equip, isSub) {
+  const el = document.getElementById('trTempSection');
+  if (!el) return;
+  if (!isSub || !equip.변압기수량) { el.innerHTML = ''; return; }
+  const cnt = equip.변압기수량;
+  let html = `<div class="sec-title">🌡 변압기 온도 <span style="color:var(--pri);font-weight:700;">${cnt}대</span></div>`;
+  if (cnt === 1) {
+    html += `<div class="fg"><label>변압기 온도(°C)</label>
+      <input type="text" id="tr_temp_1" inputmode="decimal" placeholder="25.0" oninput="handleSmartInput(this)">
+    </div>`;
+  } else {
+    html += `<div class="fg">
+      <label>변압기 온도(°C) <span style="font-weight:400;color:var(--muted);font-size:.78rem;">${cnt}대 / 구분 입력</span></label>
+      <input type="text" id="tr_temp_multi" inputmode="decimal"
+             placeholder="${Array.from({length:cnt},()=>'25.0').join('/')}"
+             oninput="autoSlash(this,${cnt})">
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+function renderPhaseSet(itemId, n, unit) {
+  return `<div class="ph-set" style="display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem;">
+    <span style="font-size:.8rem;font-weight:700;color:var(--muted);min-width:2.6rem;">${n}호기</span>
+    <input type="text" id="item_${itemId}_${n}" inputmode="decimal"
+           placeholder="예: 22900/22900/22900"
+           style="flex:1;"
+           oninput="autoSlash3(this)">
+  </div>`;
+}
+function autoSlash3(el) {
+  // "..", 스페이스 → / 변환, 중복 / 정리 (3상 입력용, 아이폰 키패드 대응)
+  el.value = el.value.replace(/\.\./g,'/').replace(/ /g,'/').replace(/\/+/g,'/').replace(/\/\./g,'/');
+}
+function renderNumSet(itemId, n, unit) {
+  return `<div class="num-set" style="display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem;">
+    <span style="font-size:.8rem;font-weight:700;color:var(--muted);min-width:2.6rem;">${n}호기</span>
+    <input type="text" id="item_${itemId}_${n}" inputmode="decimal" placeholder="${unit||''}" style="flex:1;" oninput="handleSmartInput(this)">
+  </div>`;
+}
+function addNumSet(itemId, name, unit) {
+  const wrap = document.getElementById(`num_wrap_${itemId}`);
+  if (!wrap) return;
+  const n = wrap.querySelectorAll('.num-set').length + 1;
+  wrap.insertAdjacentHTML('beforeend', renderNumSet(itemId, n, unit));
+  toast(`${name} ${n}호기 추가`);
+}
+function removeNumSet(itemId, name) {
+  const wrap = document.getElementById(`num_wrap_${itemId}`);
+  if (!wrap) return;
+  const sets = wrap.querySelectorAll('.num-set');
+  if (sets.length <= 1) return toast('1호기는 제거할 수 없습니다');
+  sets[sets.length - 1].remove();
+  toast(`${name} ${sets.length}호기 제거`);
+}
+function addPhaseSet(itemId, name, unit) {
+  const wrap = document.getElementById(`ph_wrap_${itemId}`);
+  if (!wrap) return;
+  const n = wrap.querySelectorAll('.ph-set').length + 1;
+  wrap.insertAdjacentHTML('beforeend', renderPhaseSet(itemId, n, unit));
+  toast(`${name} ${n}호기 추가`);
+}
+function removePhaseSet(itemId, name) {
+  const wrap = document.getElementById(`ph_wrap_${itemId}`);
+  if (!wrap) return;
+  const sets = wrap.querySelectorAll('.ph-set');
+  if (sets.length <= 1) return toast('1호기는 제거할 수 없습니다');
+  sets[sets.length - 1].remove();
+  toast(`${name} ${sets.length}호기 제거`);
+}
+
+// ===== 0-6 A단계: 주소/비번 복사 · 네비안내 함수만 추가 (HTML 버튼은 아직 없음) =====
+
+function findSiteByNo(no) {
+  return (S.sites || []).filter(function(s) { return s.no == no; })[0];
+}
+
+function copyTextToClipboard(text, msg) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() {
+      toast(msg);
+    }).catch(function() {
+      fallbackCopyText(text, msg);
+    });
+  } else {
+    fallbackCopyText(text, msg);
+  }
+}
+
+function fallbackCopyText(text, msg) {
+  var textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-999999px';
+  textArea.style.top = '-999999px';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    document.execCommand('copy');
+    toast(msg);
+  } catch (err) {
+    toast('복사 실패: ' + err);
+  }
+  document.body.removeChild(textArea);
+}
+
+function copyAddressByNo(event, no) {
+  if (event && event.stopPropagation) event.stopPropagation();
+  var site = findSiteByNo(no);
+  if (!site) { toast('발전소 정보를 찾을 수 없습니다.'); return; }
+  var addr = String(site.설비위치 || site.시군 || '').trim();
+  if (!addr || addr === '-') { toast('등록된 주소가 없습니다.'); return; }
+  copyTextToClipboard(addr, '주소 복사 완료!');
+}
+
+function copyPasscodeByNo(event, no) {
+  if (event && event.stopPropagation) event.stopPropagation();
+  var site = findSiteByNo(no);
+  if (!site) { toast('발전소 정보를 찾을 수 없습니다.'); return; }
+  var code = String(site.출입비번 || '').replace(/\/+$/, '').trim();
+  if (!code || code === '-') { toast('등록된 출입비번이 없습니다.'); return; }
+  copyTextToClipboard(code, '출입비번 복사 완료!');
+}
+
+// ── 네비안내 ────────────────────────────────────────────
+// 지도앱 목록. 여기에 항목을 추가하면 선택창이 자동으로 생깁니다.
+//  · 1개  → 선택창 없이 바로 연결
+//  · 2개+ → 선택창 표시 + 마지막 선택을 기억해 다음부터 바로 연결
+// 모바일에서 웹 주소로 열면 각 지도 서비스가 "앱으로 열기"를 안내합니다.
+var NAVI_APPS = [
+  { id: 'kakao', name: '카카오맵',
+    url: function(q) { return 'https://map.kakao.com/link/search/' + q; } }
+  // 필요해지면 아래 주석을 푸세요. 선택창이 자동으로 나타납니다.
+  // ,{ id: 'naver', name: '네이버 지도',
+  //   url: function(q) { return 'https://m.map.naver.com/search2/search.naver?query=' + q; } }
+  // ,{ id: 'tmap', name: 'T맵',
+  //   url: function(q) { return 'tmap://search?name=' + q; } }   // ※ 앱 설치 필수 (웹 없음)
+];
+
+function naviGoTo(url) {
+  try {
+    if (window.top) window.top.location.href = url;
+    else window.location.href = url;
+  } catch(_) {
+    window.open(url, '_blank');
+  }
+}
+
+function naviOpenWith(app, site, cleanAddr) {
+  try { localStorage.setItem('naviApp', app.id); } catch(_) {}
+  toast('🧭 ' + site.name + ' — ' + app.name + ' 연결 중...');
+  naviGoTo(app.url(encodeURIComponent(cleanAddr)));
+}
+
+function autoOpenNaviByNo(event, no) {
+  if (event && event.stopPropagation) event.stopPropagation();
+  var site = findSiteByNo(no);
+  if (!site) { toast('발전소 정보를 찾을 수 없습니다.'); return; }
+  var rawAddr = String(site.설비위치 || site.시군 || '').trim();
+  if (!rawAddr || rawAddr === '-') { toast('등록된 주소가 없습니다.'); return; }
+  // 괄호 안 부가정보 제거 (예: "덕고로360번길 14-1 (횡성읍 정암리 270-3)")
+  var cleanAddr = rawAddr.replace(/\(.*?\)/g, '').trim() || rawAddr;
+
+  // 앱이 하나뿐이면 바로 연결
+  if (NAVI_APPS.length === 1) { naviOpenWith(NAVI_APPS[0], site, cleanAddr); return; }
+
+  // 마지막에 고른 앱이 있으면 바로 연결
+  var last = null;
+  try { last = localStorage.getItem('naviApp'); } catch(_) {}
+  if (last) {
+    var found = NAVI_APPS.filter(function(a) { return a.id === last; })[0];
+    if (found) { naviOpenWith(found, site, cleanAddr); return; }
+  }
+
+  showNaviPicker(site, cleanAddr);
+}
+
+// 지도앱 선택창 (앱이 2개 이상일 때만 사용)
+function showNaviPicker(site, cleanAddr) {
+  var box = document.getElementById('naviPicker');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'naviPicker';
+    box.style.cssText = 'display:none;position:fixed;inset:0;z-index:99999;'
+      + 'background:rgba(0,0,0,.45);align-items:center;justify-content:center;padding:1rem;';
+    document.body.appendChild(box);
+  }
+  var inner = '<div style="background:#fff;border-radius:14px;padding:1.1rem;max-width:320px;width:100%;">'
+    + '<div style="font-weight:700;margin-bottom:.8rem;color:var(--pri);">🧭 지도앱 선택</div>';
+  for (var i = 0; i < NAVI_APPS.length; i++) {
+    inner += '<button type="button" class="btn btn-out" style="margin-bottom:.4rem;" '
+           + 'onclick="naviPick(' + i + ')">' + NAVI_APPS[i].name + '</button>';
+  }
+  inner += '<button type="button" class="btn" style="background:#f1f5f9;color:#64748b;margin-top:.3rem;" '
+         + 'onclick="naviClosePicker()">취소</button></div>';
+  box.innerHTML = inner;
+  box.style.display = 'flex';
+  S._naviTarget = { site: site, addr: cleanAddr };
+}
+
+function naviPick(idx) {
+  var t = S._naviTarget;
+  naviClosePicker();
+  if (t) naviOpenWith(NAVI_APPS[idx], t.site, t.addr);
+}
+
+function naviClosePicker() {
+  var box = document.getElementById('naviPicker');
+  if (box) box.style.display = 'none';
+}
+
+// 기억된 지도앱 초기화 (선택창을 다시 보고 싶을 때)
+function naviResetChoice() {
+  try { localStorage.removeItem('naviApp'); } catch(_) {}
+  toast('지도앱 선택이 초기화되었습니다.');
+}
+
+/**
+ * 점검항목 조회 (오프라인 대비 캐시)
+ *  비행기모드에서 서버 호출이 실패하면 S.checkItems 가 비고,
+ *  화면이 하드코딩 폴백 항목으로 떨어집니다.
+ *  한 번 받은 항목을 localStorage 에 남겨 오프라인에서도 실제 항목을 씁니다.
+ */
+async function fetchCheckItems(site, inspType) {
+  const key = 'ci_' + [site?.설비구분 || '', inspType || '', site?.측정프로필 || ''].join('|');
+
+  if (S.isOnline) {
+    const items = await api('getCheckItems', {
+      siteType: site?.설비구분, inspType: inspType, profile: site?.측정프로필 || ''
+    });
+    if (Array.isArray(items)) {
+      try { localStorage.setItem(key, JSON.stringify(items)); } catch (_) {}
+      return items;
+    }
+  }
+
+  // 오프라인이거나 조회 실패 → 마지막으로 받아둔 항목 사용
+  try {
+    const cached = JSON.parse(localStorage.getItem(key) || 'null');
+    if (Array.isArray(cached)) {
+      if (!S.isOnline) console.log('오프라인 — 저장된 점검항목 사용:', key);
+      return cached;
+    }
+  } catch (_) {}
+  return [];
+}
+
+// ── 사진 압축 (H-11) ────────────────────────────────────
+// 요즘 스마트폰 사진은 장당 3~8MB이고, base64로 바꾸면 약 1.37배 더 커집니다.
+// 월차점검 필수 사진만 8장이어도 수십 MB라 Apps Script 전송 한도와
+// 6분 실행 제한에 걸려 현장에서 업로드가 자주 실패합니다.
+// 장변 1600px / JPEG 품질 0.7로 줄이면 보통 200~400KB가 됩니다.
+// 점검 사진 용도로는 화질 손실이 거의 체감되지 않습니다.
+var PHOTO_MAX_SIDE = 1600;
+var PHOTO_QUALITY  = 0.7;
+
+function readFileAsDataUrl(file, cb) {
+  var r = new FileReader();
+  r.onload  = function(e) { cb(e.target.result); };
+  r.onerror = function()  { cb(null); };
+  r.readAsDataURL(file);
+}
+
+/**
+ * 사진 1장을 압축해 dataURL로 돌려줍니다.
+ * 압축이 불가능하거나(HEIC 등 브라우저 미지원) 오히려 커지면 원본을 그대로 씁니다.
+ */
+function compressImage(file) {
+  return new Promise(function(resolve) {
+    if (!file || String(file.type || '').indexOf('image/') !== 0) {
+      readFileAsDataUrl(file, resolve);
+      return;
+    }
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+
+    img.onload = function() {
+      var canvas = null;
+      try {
+        var w = img.naturalWidth  || img.width;
+        var h = img.naturalHeight || img.height;
+        var scale = Math.min(1, PHOTO_MAX_SIDE / Math.max(w, h));
+        var cw = Math.max(1, Math.round(w * scale));
+        var chh = Math.max(1, Math.round(h * scale));
+
+        canvas = document.createElement('canvas');
+        canvas.width = cw; canvas.height = chh;
+        canvas.getContext('2d').drawImage(img, 0, 0, cw, chh);
+
+        var out = canvas.toDataURL('image/jpeg', PHOTO_QUALITY);
+        URL.revokeObjectURL(url);
+
+        // iOS는 캔버스 메모리를 늦게 회수합니다. 명시적으로 비워 압박을 줄입니다.
+        canvas.width = 1; canvas.height = 1; canvas = null;
+        img.src = '';
+
+        // 원본이 이미 더 작으면(작은 PNG 등) 굳이 바꾸지 않음
+        if (out.length >= file.size * 1.37) { readFileAsDataUrl(file, resolve); return; }
+        resolve(out);
+      } catch (e) {
+        URL.revokeObjectURL(url);
+        if (canvas) { canvas.width = 1; canvas.height = 1; }
+        readFileAsDataUrl(file, resolve);
+      }
+    };
+
+    // HEIC 등 브라우저가 디코딩 못 하는 형식 → 원본 전송
+    img.onerror = function() {
+      URL.revokeObjectURL(url);
+      readFileAsDataUrl(file, resolve);
+    };
+
+    img.src = url;
+  });
+}
+
+// dataURL 의 대략적인 실제 바이트 수 (base64는 원본의 약 4/3)
+function dataUrlBytes(b64) {
+  return Math.round(String(b64 || '').length * 0.75);
+}
+
+function fmtSize(bytes) {
+  if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + 'MB';
+  return Math.max(1, Math.round(bytes / 1024)) + 'KB';
+}
+
+// ── 사진 선택창 열기 ────────────────────────────────────
+// ⚠️ capture 속성을 "지정하지 않는 것"이 핵심입니다.
+//    지정하면 카메라만 바로 열려 이미 찍어둔 사진을 못 씁니다.
+//    지정하지 않으면 iOS·안드로이드가 「사진 보관함 / 사진 찍기 / 파일 선택」
+//    기본 메뉴를 알아서 띄워줍니다. 앱이 따로 선택창을 만들 필요가 없습니다.
+function openImagePicker(multiple, onFiles) {
+  // ⚠️ iOS Safari는 DOM에 붙어 있지 않은 <input>의 파일 선택창을
+  //    열지 못하는 경우가 있습니다. 백그라운드 작업으로 메모리 압박이 있을 때
+  //    특히 자주 실패합니다. 화면 밖에 잠깐 붙였다가 떼는 방식이 안정적입니다.
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/jpeg,image/png,image/heic,image/heif,image/webp';
+  if (multiple) input.multiple = true;
+  input.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+
+  var done = false;
+  var cleanup = function () {
+    if (input.parentNode) input.parentNode.removeChild(input);
+  };
+
+  input.onchange = function () {
+    done = true;
+    var files = Array.prototype.slice.call(input.files || []);
+    cleanup();
+    onFiles(files);
+  };
+
+  document.body.appendChild(input);
+
+  // 취소하거나 실패해도 요소가 남지 않게 정리합니다
+  setTimeout(function () { if (!done) cleanup(); }, 120000);
+
+  try {
+    input.click();
+  } catch (e) {
+    cleanup();
+    toast('사진 선택창을 열지 못했습니다. 다시 시도해 주세요.');
+  }
+}
+</script>
+<script>
+function getCamBadge(itemId) {
+  const list = S.photoMap ? (S.photoMap[itemId] || []) : [];
+  return list.length > 0 ? ` ${list.length}` : '';
+}
+
+function renderInspSection(inspTypeOrTypes, site, equip, isLow, isSub, sections) {
+  const wrap = document.getElementById('inspSectionWrap');
+  if (!wrap) return;
+
+  // ── 입력값 보존: 재렌더링 전 현재 입력 스냅샷 ──
+  const saved = {};
+  wrap.querySelectorAll('input, textarea, select').forEach(el => {
+    if (el.id && el.value !== '' && el.type !== 'file') saved[el.id] = el.value;
+  });
+
+  // ── 아코디언 구성 ──
+  //  긴급출동은 기본정보 화면의 「🚨 긴급출동」 버튼으로만 진입합니다.
+  //  정기점검(기록·측정 등)과 성격이 달라 같은 목록에 섞지 않습니다.
+  const BASE_TYPES  = S.emergencyMode
+    ? ['긴급출동']
+    : ['월차점검','기록','측정','열화상촬영'];
+  const EXTRA_TYPES = S.emergencyMode ? [] : ['분기점검','반기점검'];
+  const icons = {'월차점검':'🔍','측정':'📐','기록':'📊','분기점검':'📅','반기점검':'🗓','긴급출동':'🚨','열화상촬영':'🌡'};
+  if (!S.extraTypesShown) S.extraTypesShown = [];
+
+  const renderAcc = function(t) {
+    const opened = (S.inspTypes||[]).indexOf(t) >= 0;
+    return `<div class="acc-sec" id="acc_${t}">
+      <div class="acc-hdr${opened?' open':''}" id="accHdr_${t}" onclick="toggleInspAcc('${t}')"
+        style="display:flex;justify-content:space-between;align-items:center;padding:.75rem .9rem;
+               background:${opened?'#eff6ff':'#f8fafc'};border:1.5px solid ${opened?'var(--pri)':'var(--border)'};
+               border-radius:10px;margin:.5rem 0 .3rem;cursor:pointer;font-weight:700;font-size:.92rem;">
+        <span>${icons[t]} ${t}</span>
+        <span id="accArrow_${t}" style="color:var(--muted);">${opened?'▲':'▼'}</span>
+      </div>
+      <div class="acc-body" id="accBody_${t}" style="display:${opened?'block':'none'};padding:.3rem .1rem;">
+        ${buildSectionHtml(t, site, equip, isLow, isSub, sections)}
+      </div>
+    </div>`;
+  };
+
+  let out = '';
+  // 프로필에 항목이 있는 점검구분만 표시 (availTypes 미조회 시 전체 표시)
+  const isAvail = function(t) {
+    return !S.availTypes || S.availTypes[t];
+  };
+  BASE_TYPES.forEach(t => { if (isAvail(t)) out += renderAcc(t); });
+  // 표시된(선택됐거나 사용자가 연) 분기/반기만 렌더
+  EXTRA_TYPES.forEach(t => {
+    if (isAvail(t) && (S.extraTypesShown.indexOf(t) >= 0 || (S.inspTypes||[]).indexOf(t) >= 0)) out += renderAcc(t);
+  });
+  // [+ 추가점검] 버튼 (항목이 있고 아직 안 보이는 분기/반기만)
+  const hidden = EXTRA_TYPES.filter(t => isAvail(t) && S.extraTypesShown.indexOf(t) < 0 && (S.inspTypes||[]).indexOf(t) < 0);
+  if (hidden.length > 0) {
+    out += `<div style="text-align:center;margin:.5rem 0;">
+      ${hidden.map(t => `<button type="button" onclick="showExtraType('${t}')"
+        style="border:1.5px dashed var(--border);border-radius:8px;padding:.45rem .9rem;margin:0 .2rem;
+               background:#fafafa;font-size:.85rem;cursor:pointer;color:var(--muted);">+ ${icons[t]} ${t}</button>`).join('')}
+    </div>`;
+  }
+  wrap.innerHTML = out;
+  renderActionSection(wrap);
+
+  // ── 입력값 복원 (O/X hidden 값은 버튼 하이라이트도 복원) ──
+  Object.entries(saved).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = val;
+    if (el.type === 'hidden') {
+      const row = el.closest('.ox-row');
+      if (row) {
+        const map = {'O':'o','X':'x','△':'t','/':'na'};
+        const btn = row.querySelector(`.ox-btn.${map[val]}`);
+        if (btn) btn.classList.add('sel');
+      }
+    }
+  });
+}
+function toggleInspAcc(t) {
+  const bodyEl  = document.getElementById(`accBody_${t}`);
+  const hdrEl   = document.getElementById(`accHdr_${t}`);
+  const arrowEl = document.getElementById(`accArrow_${t}`);
+  if (bodyEl) {
+    const isOpening = bodyEl.style.display === 'none';
+    bodyEl.style.display = isOpening ? 'block' : 'none';
+    if (hdrEl)   hdrEl.classList.toggle('open', isOpening);
+    if (arrowEl) arrowEl.textContent = isOpening ? '▲' : '▼';
+  }
+  if (typeof selectInspType === 'function') {
+    selectInspType(t);
+  }
+}
+async function showExtraType(t) {
+  // [+ 추가점검] — 분기/반기 아코디언 표시 + 바로 펼침(선택)
+  if (!S.extraTypesShown) S.extraTypesShown = [];
+  if (S.extraTypesShown.indexOf(t) < 0) S.extraTypesShown.push(t);
+  await selectInspType(t);
+}
+function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
+  let html = '';
+  if (inspType === '열화상촬영') {
+    html += `
+    <div class="sec-title">🌡 열화상촬영</div>
+    <div class="fg">
+      <label>촬영일시 <span style="font-weight:400;color:var(--muted);font-size:.78rem;">첫 사진 업로드 시 자동 입력</span></label>
+      <input type="datetime-local" id="item_thermal_dt" placeholder="사진 선택 시 자동 입력">
+    </div>
+    <div class="fg"><label>열화상 사진</label>
+      <button type="button" onclick="addThermalPhoto()"
+        style="width:100%;padding:.75rem;border:1.5px dashed var(--border);border-radius:10px;
+               background:#f8fafc;font-size:.9rem;cursor:pointer;">📷 사진 추가</button>
+    </div>
+    <div class="photo-grid" id="thermalGrid"></div>`;
+    return html;
+  }
+  if (inspType === '긴급출동') {
+    html += `<div class="sec-title">🚨 긴급출동</div>
+    <div class="fg"><label>장애 현상 *
+      <button class="cam-btn" id="cam_item_fault_desc" onclick="takeItemPhoto('item_fault_desc','장애현상')" style="margin-left:.3rem;">📷${getCamBadge('item_fault_desc')}</button>
+    </label><textarea id="item_fault_desc" placeholder="장애 현상 상세 기술"></textarea></div>
+    <div class="fg"><label>조치 내용 *
+      <button class="cam-btn" id="cam_item_fault_action" onclick="takeItemPhoto('item_fault_action','조치내용')" style="margin-left:.3rem;">📷${getCamBadge('item_fault_action')}</button>
+    </label><textarea id="item_fault_action" placeholder="현장 조치 내용"></textarea></div>`;
+    return html;
+  }
+  if (inspType === '측정' || inspType === '기록' || inspType === '분기점검' || inspType === '반기점검') {
+    const secIcons = {'측정':'📐','기록':'📊','분기점검':'📅','반기점검':'🗓'};
+    html += `<div class="sec-title">${secIcons[inspType]||'📐'} ${inspType}</div>`;
+    if (inspType === '측정' && !equip.channels) {
+      html += `<div style="padding:.6rem;background:#fef3c7;border-radius:8px;font-size:.85rem;color:#92400e;margin-bottom:.5rem;">
+        ⚠️ 설비정보 로딩 중이거나 설비관리대장에 채널 정보(명판(채널수))가 없습니다.</div>`;
+    }
+    // ── 시트(점검항목관리) 기반 항목 렌더링 (각 아코디언은 자기 점검구분 항목만) ──
+    const measureItems = (S.checkItems||[]).filter(it => it.점검구분 === inspType);
+    // 기록/분기/반기: 시트 항목이 없으면 안내만 표시 (측정 폴백으로 넘어가지 않음)
+    if (inspType !== '측정' && measureItems.length === 0) {
+      html += `<div style="padding:.6rem;color:var(--muted);font-size:.88rem;">해당 항목이 없습니다. (점검항목관리 시트에서 점검구분=${inspType} 항목을 확인하세요)</div>`;
+      return html;
+    }
+    if (measureItems.length > 0) {
+      // 채널반복 항목들은 명판(INV/접속반) 단위로 묶어서 렌더링
+      //   INV-1: 누적발전량, 채널전류, 개방전압... → INV-2: ... 순서
+      const chItems = measureItems.filter(it => it.입력유형 === '채널반복');
+      let chGroupRendered = false;
+
+      const renderChGroup = () => {
+        if (chGroupRendered || !equip.channels?.length || !chItems.length) return '';
+        chGroupRendered = true;
+        let h = '';
+        equip.channels.forEach((ch, i) => {
+          const lbl = ch.label || `No${ch.slot || i + 1}`;
+          h += `<div style="border:1.5px solid var(--border);border-radius:10px;padding:.6rem .7rem;margin-bottom:.5rem;background:#fafcff;">
+            <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">${lbl} <span class="ch-hint">${ch.count}채널</span></div>`;
+          chItems.forEach(item => {
+            const u = item.단위 ? ` (${item.단위})` : '';
+            if (item.항목ID === 'ch_current' || /채널.*전류/.test(item.항목명)) {
+              h += `<div class="fg" style="margin-bottom:.4rem;">
+                <label>${item.항목명}${u}
+                  ${isDevUser()?`<button class="cam-btn" type="button" onclick="randomFill('ch_${i}',${ch.count})" style="margin-left:.2rem;">🎲</button>`:''}
+                </label>
+                <input class="ch-input" type="text" id="ch_${i}" inputmode="decimal"
+                       placeholder="${Array.from({length:Math.min(ch.count,5)},(_,j)=>j===0?'2.3':'0.0').join('/')+'...'}"
+                       oninput="autoSlash(this,${ch.count})" onblur="validateCh(this,${ch.count},'${ch.label||''}',${ch.slot||i+1})">
+                <div class="ch-status" id="chs_${i}"></div>
+              </div>`;
+            } else {
+              h += `<div class="fg" style="margin-bottom:.4rem;">
+                <label>${item.항목명}${u}</label>
+                <input type="text" id="item_${item.항목ID}_${i+1}" inputmode="decimal" placeholder="${item.단위||''}" oninput="handleSmartInput(this)">
+              </div>`;
+            }
+          });
+          h += `</div>`;
+        });
+        return h;
+      };
+
+      measureItems.forEach(item => {
+        const t = item.입력유형;
+        const unit = item.단위 ? ` (${item.단위})` : '';
+        if (t === '채널반복') {
+          // 첫 채널반복 항목 위치에서 그룹 전체 렌더 (이후 항목은 스킵)
+          html += renderChGroup();
+        } else if (t === '3상') {
+          // 3상 측정 — A/B/C상을 "/" 구분 한 줄 입력, [+ 추가]로 호기 확장
+          html += `<div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
+            <span style="font-size:.83rem;font-weight:700;color:var(--muted);">${item.항목명}${unit} <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
+            <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);"
+              onclick="addPhaseSet('${item.항목ID}','${(item.항목명||'').replace(/'/g,'')}','${item.단위||''}')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('${item.항목ID}','${(item.항목명||'').replace(/'/g,'')}')">− 제거</button>
+          </div>
+          <div id="ph_wrap_${item.항목ID}">
+            ${renderPhaseSet(item.항목ID, 1, item.단위)}
+          </div>`;
+        } else if (t === '숫자반복') {
+          // 호기별 단일값 입력 + [+ 추가] (VCB/ACB 발전량 등)
+          html += `<div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
+            <span style="font-size:.83rem;font-weight:700;color:var(--muted);">${item.항목명}${unit}</span>
+            <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);"
+              onclick="addNumSet('${item.항목ID}','${(item.항목명||'').replace(/'/g,'')}','${item.단위||''}')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removeNumSet('${item.항목ID}','${(item.항목명||'').replace(/'/g,'')}')">− 제거</button>
+          </div>
+          <div id="num_wrap_${item.항목ID}">
+            ${renderNumSet(item.항목ID, 1, item.단위)}
+          </div>`;
+        } else if (t === '숫자') {
+          html += `<div class="fg"><label>${item.항목명}${unit}</label>
+            <input type="text" id="item_${item.항목ID}" inputmode="decimal" placeholder="${item.단위||''}" oninput="handleSmartInput(this)"></div>`;
+        } else if (t === '텍스트') {
+          html += `<div class="fg"><label>${item.항목명}</label>
+            <textarea id="item_${item.항목ID}"></textarea></div>`;
+        } else if (t === 'OX2' || t === 'OX2_NA' || t === 'OX') {
+          html += `<div class="ox-table">${renderOXRow(item)}</div>`;
+        }
+      });
+      return html;
+    }
+    // ── 폴백: 시트 미설정 시 — 명판(INV/접속반) 단위 묶음 렌더링 ──
+    // 실물 시트의 인버터구분 값은 'S' / 'C' 입니다 ('스트링'/'센트럴' 아님) → 공용 판정함수 사용 (N-3)
+    const isStr = isStringInv(equip.인버터구분);
+    if (equip.channels?.length > 0) {
+      equip.channels.forEach((ch, i) => {
+        const slot = ch.slot || i + 1;
+        const lbl = ch.label || (isStr ? `INV${slot}` : `No${slot}`);
+        html += `<div style="border:1.5px solid var(--border);border-radius:10px;padding:.6rem .7rem;margin-bottom:.5rem;background:#fafcff;">
+          <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">${lbl} <span class="ch-hint">${ch.count}채널</span></div>`;
+        if (isStr) {
+          html += `<div class="row2" style="margin-bottom:.4rem;">
+            <div class="fg" style="margin-bottom:0;"><label>누적발전량(kWh)</label>
+              <input type="text" id="inv_kwh_${i+1}" inputmode="decimal" placeholder="kWh" oninput="handleSmartInput(this)"></div>
+            <div class="fg" style="margin-bottom:0;"><label>현재발전량(kW)</label>
+              <input type="text" id="inv_kw_${i+1}" inputmode="decimal" placeholder="kW" oninput="handleSmartInput(this)"></div>
+          </div>`;
+        }
+        html += `<div class="fg" style="margin-bottom:.4rem;">
+            <label>채널별 전류(A)
+              ${isDevUser()?`<button class="cam-btn" type="button" onclick="randomFill('ch_${i}',${ch.count})" style="margin-left:.2rem;">🎲</button>`:''}
+            </label>
+            <input class="ch-input" type="text" id="ch_${i}" inputmode="decimal"
+                   placeholder="${Array.from({length:Math.min(ch.count,5)},(_,j)=>j===0?'2.3':'0.0').join('/')+'...'}"
+                   oninput="autoSlash(this,${ch.count})" onblur="validateCh(this,${ch.count},'${ch.label||''}',${ch.slot||i+1})">
+            <div class="ch-status" id="chs_${i}"></div>
+          </div>
+          <div class="row2">
+            <div class="fg" style="margin-bottom:0;"><label>개방전압(V)</label>
+              <input type="text" id="voc_${i}" inputmode="decimal" placeholder="V" oninput="handleSmartInput(this)"></div>
+            <div class="fg" style="margin-bottom:0;"><label>절연저항(MΩ)</label>
+              <input type="text" id="ins_${i}" inputmode="decimal" placeholder="MΩ" oninput="handleSmartInput(this)"></div>
+          </div>
+        </div>`;
+      });
+    } else {
+      html += `<div class="row2">
+        <div class="fg"><label>절연저항(MΩ)</label><input type="text" id="ins_0" inputmode="decimal" oninput="handleSmartInput(this)"></div>
+        <div class="fg"><label>개방전압 Voc(V)</label><input type="text" id="voc_0" inputmode="decimal" oninput="handleSmartInput(this)"></div>
+      </div>`;
+    }
+    html += `
+    <div style="font-size:.83rem;font-weight:700;color:var(--muted);margin:.75rem 0 .3rem;">전력 / 역률 / 주파수</div>
+    <div class="row3">
+      <div class="fg"><label>유효전력(kW)</label>
+        <input type="text" id="item_active_pw" inputmode="decimal" placeholder="kW" oninput="handleSmartInput(this)">
+      </div>
+      <div class="fg"><label>무효전력(kVar)</label>
+        <input type="text" id="item_reactive_pw" inputmode="decimal" placeholder="kVar" oninput="handleSmartInput(this)">
+      </div>
+      <div class="fg"><label>피상전력(kVA)</label>
+        <input type="text" id="item_apparent_pw" inputmode="decimal" placeholder="kVA" oninput="handleSmartInput(this)">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="fg"><label>역률(%)</label>
+        <input type="text" id="item_pf" inputmode="decimal" placeholder="%" min="0" max="100" oninput="handleSmartInput(this)">
+      </div>
+      <div class="fg"><label>주파수(Hz)</label>
+        <input type="text" id="item_freq" inputmode="decimal" placeholder="Hz" value="60.0" oninput="handleSmartInput(this)">
+      </div>
+    </div>`;
+    if (!isLow) {
+      html += `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:.75rem 0 .3rem;">
+        <span style="font-size:.83rem;font-weight:700;color:var(--muted);">VCB 전압 (V) <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
+        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('vcb_v','VCB 전압','V')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('vcb_v','VCB 전압')">− 제거</button>
+      </div>
+      <div id="ph_wrap_vcb_v">${renderPhaseSet('vcb_v', 1, 'V')}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
+        <span style="font-size:.83rem;font-weight:700;color:var(--muted);">VCB 전류 (A) <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
+        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('vcb_a','VCB 전류','A')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('vcb_a','VCB 전류')">− 제거</button>
+      </div>
+      <div id="ph_wrap_vcb_a">${renderPhaseSet('vcb_a', 1, 'A')}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
+        <span style="font-size:.83rem;font-weight:700;color:var(--muted);">ACB 전압 (V) <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
+        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('acb_v','ACB 전압','V')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('acb_v','ACB 전압')">− 제거</button>
+      </div>
+      <div id="ph_wrap_acb_v">${renderPhaseSet('acb_v', 1, 'V')}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
+        <span style="font-size:.83rem;font-weight:700;color:var(--muted);">ACB 전류 (A) <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
+        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('acb_a','ACB 전류','A')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('acb_a','ACB 전류')">− 제거</button>
+      </div>
+      <div id="ph_wrap_acb_a">${renderPhaseSet('acb_a', 1, 'A')}</div>`;
+    }
+    return html;
+  }
+  // ── 월차점검 ──
+  html += `<div class="sec-title">🔍 월차점검 <span style="font-weight:400;color:var(--muted);font-size:.78rem;">항목별 필요 사진 매수는 배지로 표시됩니다</span></div>`;
+  html += `
+  <div class="all-ok-bar" id="allOkBar">
+    <span>✅ 전체 양호</span>
+    <button type="button" class="all-ok-btn" id="allOkBtn" onclick="setAllOK()">전체 O 선택</button>
+  </div>`;
+  // 월차점검 항목만 필터 (복수 점검 시 측정 항목 혼입 방지)
+  const monthlySections = {};
+  Object.entries(sections).forEach(([sec, secItems]) => {
+    const filtered = secItems.filter(it => (it.점검구분 === '월차점검' || it.점검구분 === 'ALL'));
+    if (filtered.length) monthlySections[sec] = filtered;
+  });
+  if (Object.keys(monthlySections).length > 0) {
+    Object.entries(monthlySections).forEach(([sec, secItems]) => {
+      html += `<div class="ox-table">`;
+      secItems.forEach(item => {
+        if (item.입력유형 === 'OX' || item.입력유형 === 'OX2' || item.입력유형 === 'OX2_NA') {
+          html += renderOXRow(item);
+        } else if (item.입력유형 === '숫자') {
+          html += `</div><div class="fg"><label>${item.항목명}${item.단위?' ('+item.단위+')':''}</label>
+            <input type="text" id="item_${item.항목ID}" inputmode="decimal" oninput="handleSmartInput(this)"></div><div class="ox-table">`;
+        } else if (item.입력유형 === '선택') {
+          html += `</div><div class="fg"><label>${item.항목명}</label>
+            <select id="item_${item.항목ID}">${item.선택지.map(o=>`<option>${o}</option>`).join('')}</select>
+          </div><div class="ox-table">`;
+        } else {
+          html += `</div><div class="fg"><label>${item.항목명}</label>
+            <textarea id="item_${item.항목ID}"></textarea></div><div class="ox-table">`;
+        }
+      });
+      html += `</div>`;
+    });
+  } else {
+    html += renderDefaultCheckItems(inspType);
+  }
+  return html;
+}
+
+
+
+function setAllOK() {
+  const btn = document.getElementById('allOkBtn');
+  const isActive = btn?.classList.contains('active');
+
+  if (!isActive) {
+    document.querySelectorAll('.ox-row').forEach(row => {
+      row.querySelectorAll('.ox-btn').forEach(b => b.classList.remove('sel'));
+      const inp = row.querySelector('input[type="hidden"]');
+      const hasNA = row.querySelector('.ox-btn.na');
+      if (hasNA) {
+        const oBtn = row.querySelector('.ox-btn.o');
+        if (oBtn) oBtn.classList.add('sel');
+        if (inp) inp.value = 'O';
+      } else {
+        const oBtn = row.querySelector('.ox-btn.o');
+        if (oBtn) oBtn.classList.add('sel');
+        if (inp) inp.value = 'O';
+      }
+    });
+    if (btn) { btn.classList.add('active'); btn.textContent = '✅ 전체 O 설정됨'; }
+    toast('✅ 모든 점검항목을 양호(O)로 설정했습니다');
+  } else {
+    document.querySelectorAll('.ox-row input[type="hidden"]').forEach(inp => inp.value = '');
+    document.querySelectorAll('.ox-btn').forEach(b => b.classList.remove('sel'));
+    if (btn) { btn.classList.remove('active'); btn.textContent = '전체 O 선택'; }
+    toast('초기화됐습니다');
+  }
+}
+/**
+ * 추가사진 — 버튼 하나로 촬영/보관함 선택 (H-11)
+ *  기존에는 「카메라 촬영」·「갤러리 선택」 버튼이 따로 있었습니다.
+ *  항목별 사진과 동일하게 버튼 하나 → 선택창 방식으로 통일했습니다.
+ */
+function addSitePhoto() {
+  openImagePicker(true, previewSitePhotos);
+}
+
+async function previewSitePhotos(files) {
+  const grid = document.getElementById('sitePhotoGrid');
+  if (!grid || !files || !files.length) return;
+
+  toast(`사진 처리 중... (${files.length}장)`);
+  let saved = 0, before = 0, after = 0;
+
+  for (const file of files) {
+    const b64 = await compressImage(file);
+    if (!b64) continue;
+    before += file.size;
+    after  += dataUrlBytes(b64);
+
+    const div = document.createElement('div');
+    div.className = 'photo-thumb';
+    div.dataset.base64 = b64;
+    div.dataset.filename = file.name;
+    div.dataset.type = 'site';
+    const img = document.createElement('img');
+    img.src = b64;
+    const del = document.createElement('button');
+    del.className = 'del-btn';
+    del.textContent = '×';
+    del.onclick = function() { div.remove(); };
+    div.appendChild(img);
+    div.appendChild(del);
+    grid.appendChild(div);
+    saved++;
+  }
+
+  if (saved === 0) { toast('사진을 읽지 못했습니다. 다시 시도해 주세요.'); return; }
+  toast(`📷 추가사진 ${saved}장 · ${fmtSize(before)} → ${fmtSize(after)}`);
+}
+function renderActionSection(wrap) {
+  const div = document.createElement('div');
+  div.innerHTML = `
+  <div class="sec-title">📷 추가사진</div>
+  <button type="button" onclick="addSitePhoto()"
+    style="width:100%;padding:.75rem;border:1.5px dashed var(--border);border-radius:10px;
+           background:#f8fafc;font-size:.9rem;cursor:pointer;text-align:center;margin-bottom:.5rem;">
+    📷 사진 추가
+  </button>
+  <div class="photo-grid" id="sitePhotoGrid"></div>
+
+  <div class="sec-title">🔧 조치사항</div>
+  <div class="fg"><label>종합 점검결과 *</label>
+    <select id="f_result">
+      <option value="이상없음">이상없음</option>
+      <option value="경미">경미한 이상</option>
+      <option value="즉시조치">즉시조치 필요</option>
+    </select>
+  </div>
+  <div class="fg"><label>조치구분</label>
+    <select id="f_action" onchange="toggleAction(this.value)">
+      <option value="없음">없음</option>
+      <option value="자체처리">자체처리</option>
+      <option value="업체서비스요청">업체 서비스 요청</option>
+      <option value="지원팀요청">지원팀 요청</option>
+    </select>
+  </div>
+  <div id="actionDetail" style="display:none;">
+    <div class="fg"><label>요청 내용</label><textarea id="f_action_detail" placeholder="조치 요청 내용"></textarea></div>
+    <div class="fg" id="vendorWrap" style="display:none;"><label>요청 업체명</label><input type="text" id="f_vendor" placeholder="업체명"></div>
+  </div>
+  <div class="fg"><label>특이사항</label><textarea id="f_note" placeholder="점검 중 발견 내용, 고객 요청사항 등"></textarea></div>
+  <button class="btn btn-ok" onclick="submitForm()">📤 제출</button>
+`;
+  wrap.appendChild(div);
+}
+// 열화상 사진 (H-11)
+function addThermalPhoto() {
+  openImagePicker(true, previewThermal);
+}
+
+async function previewThermal(files) {
+  const grid = document.getElementById('thermalGrid');
+  if (!grid || !files || !files.length) return;
+
+  // 촬영일시 자동 입력 — ⚠️ 압축 전 '원본' 파일에서 EXIF를 읽어야 합니다.
+  //    압축하면 EXIF가 사라지므로 순서가 중요합니다.
+  const firstFile = files[0];
+  const dtEl = document.getElementById('item_thermal_dt');
+  if (dtEl && !dtEl.value) {
+    extractExifDate(firstFile).then(exifDt => {
+      if (exifDt) {
+        dtEl.value = exifDt;
+      } else {
+        const d = new Date(firstFile.lastModified);
+        dtEl.value = toDatetimeLocal(d);
+      }
+    });
+  }
+
+  toast(`사진 처리 중... (${files.length}장)`);
+  let saved = 0, before = 0, after = 0;
+
+  for (const file of files) {
+    const b64 = await compressImage(file);
+    if (!b64) continue;
+    before += file.size;
+    after  += dataUrlBytes(b64);
+
+    const div = document.createElement('div');
+    div.className = 'photo-thumb';
+    const img = document.createElement('img');
+    img.src = b64;
+    const del = document.createElement('button');
+    del.className = 'del-btn';
+    del.textContent = '×';
+    del.onclick = function() { div.remove(); };
+    div.appendChild(img);
+    div.appendChild(del);
+    grid.appendChild(div);
+    saved++;
+  }
+
+  if (saved > 0) toast(`🌡 열화상 ${saved}장 · ${fmtSize(before)} → ${fmtSize(after)}`);
+}
+
+
+
+function extractExifDate(file) {
+  return new Promise(res => {
+    if (!file.type.includes('jpeg') && !file.type.includes('jpg') && !file.type.includes('heic')) {
+      return res(null);
+    }
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const buf = ev.target.result;
+        const view = new DataView(buf);
+        if (view.getUint16(0) !== 0xFFD8) return res(null);
+        let offset = 2;
+        while (offset < buf.byteLength - 4) {
+          const marker = view.getUint16(offset);
+          const len    = view.getUint16(offset + 2);
+          if (marker === 0xFFE1) { 
+            const exifStr = String.fromCharCode(...new Uint8Array(buf, offset+4, 6));
+            if (exifStr.startsWith('Exif')) {
+              const bytes = new Uint8Array(buf, offset+10, len-8);
+              const txt   = String.fromCharCode(...bytes);
+              const m = txt.match(/(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+              if (m) {
+                const dt = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}`;
+                return res(dt);
+              }
+            }
+          }
+          offset += 2 + len;
+          if (marker === 0xFFDA) break; 
+        }
+        res(null);
+      } catch(e) { res(null); }
+    };
+    reader.readAsArrayBuffer(file.slice(0, 65536)); 
+  });
+}
+
+function toDatetimeLocal(d) {
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function autoSlashKwh(el) {
+  const pos = el.selectionStart;
+  const before = el.value;
+  el.value = before.replace(/\.\./g, '/').replace(/ +/g, '/');
+  const diff = before.length - el.value.length;
+  el.setSelectionRange(pos - diff, pos - diff);
+  updateKwhPreview(el.value);
+}
+
+function finalizeKwh(el) {
+  el.value = el.value.replace(/\/+/g, '/').replace(/^\/|\/$/g, '').trim();
+  updateKwhPreview(el.value);
+}
+
+function insertSlashKwh() {
+  const el = document.getElementById('f_inv_kwh');
+  if (!el) return;
+  const pos = el.selectionStart || el.value.length;
+  const v = el.value;
+  if (v.slice(0, pos).endsWith('/')) { el.focus(); return; }
+  el.value = v.slice(0, pos) + '/' + v.slice(pos);
+  const newPos = pos + 1;
+  el.focus();
+  el.setSelectionRange(newPos, newPos);
+  updateKwhPreview(el.value);
+}
+
+function updateKwhPreview(val) {
+  const el = document.getElementById('kwhPreview');
+  if (!el) return;
+  const parts = val.split('/').map(p => p.trim()).filter(p => p && !isNaN(p));
+  if (!parts.length) { el.textContent = ''; return; }
+  const total = parts.reduce((a, b) => a + parseFloat(b), 0);
+  el.textContent = `인버터 ${parts.length}대 · 합계 ${total.toLocaleString()} kWh`;
+}
+let currentInspType = '월차점검';
+</script>
+<script>
+function getCheckItemLabel(itemId) {
+  if (itemId === 'site_photos' || itemId === 'extra') return '추가사진';
+  if (itemId === 'thermal_photos' || itemId === 'thermal') return '열화상 촬영';
+  if (itemId.startsWith('ch_')) return '채널별 전류';
+  const el = document.getElementById(itemId) || document.getElementById(`item_${itemId}`);
+  if (el) {
+    const fg = el.closest('.fg') || el.closest('tr');
+    if (fg) {
+      const lbl = fg.querySelector('label') || fg.querySelector('td:first-child');
+      if (lbl) return lbl.textContent.replace('📷', '').replace(/🎲/g, '').trim();
+    }
+  }
+  return itemId;
+}
+
+
+/**
+ * 전송 대기 중인 점검이 있는지 알려주기만 합니다.
+ *
+ * ⚠️ 예전에는 대기 건을 점검폼에 그대로 채워 넣었습니다.
+ *    그래서 다음 점검을 하려고 발전소를 열면 이전 점검 내용이 튀어나왔습니다.
+ *    지금은 자동 임시저장(draft)이 「작성 중」을 담당하고,
+ *    이미 제출한 건은 건드리지 않습니다. 안내만 하고 폼은 비워둡니다.
+ */
+async function restoreOfflineQueueForSite(no) {
+  S.pendingQueueId = null;
+  S.pendingData = null;
+  try {
+    const items = (await withIdb(db => new Promise(res => {
+      const req = db.transaction(IDB_SUBMIT, 'readonly').objectStore(IDB_SUBMIT).getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => res([]);
+    }))) || [];
+
+    const pending = items.filter(it => it.payload?.data?.no == no);
+    if (!pending.length) return;
+
+    const sent = pending.filter(it => it.payload?.submittedId).length;
+    toast(sent
+      ? `📤 이 발전소의 이전 점검은 기록 완료, 사진 전송이 남아 있습니다.`
+      : `📤 이 발전소의 이전 점검 ${pending.length}건이 전송 대기 중입니다.`, 4000);
+  } catch (e) {
+    console.warn('대기 건 확인 실패', e);
+  }
+}
+
+
+function prefetchCheckItems(site) {
+  if (!site) return;
+  if (!S.checkItemsCache) S.checkItemsCache = {};
+  const typesToPrefetch = ['월차점검', '기록', '측정', '긴급출동'];
+  typesToPrefetch.forEach(ty => {
+    const cacheKey = `${site.설비구분 || ''}_${ty}_${site.측정프로필 || ''}`;
+    if (!S.checkItemsCache[cacheKey]) {
+      fetchCheckItems(site, ty).then(items => {
+        if (items && items.length) S.checkItemsCache[cacheKey] = items;
+      });
+    }
+  });
+}
+
+async function selectInspType(t) {
+  // 복수 점검 지원 — 버튼 토글 방식 (예: 월차점검+측정)
+  if (!Array.isArray(S.inspTypes)) S.inspTypes = [];
+  const idx = S.inspTypes.indexOf(t);
+  if (idx >= 0) {
+    S.inspTypes.splice(idx, 1);   // 재탭 → 해제
+  } else {
+    S.inspTypes.push(t);          // 선택 추가
+  }
+  if (S.inspTypes.length === 0) S.inspTypes = [t]; // 최소 1개 유지
+  currentInspType = S.inspTypes.join('+');
+
+  document.querySelectorAll('.insp-type-btn').forEach(b =>
+    b.classList.toggle('active', S.inspTypes.indexOf(b.textContent) >= 0));
+
+  const site  = S.currentSite;
+  const equip = S.currentEquip || {};
+  const isLow = (site?.설비구분||'').includes('일반저압');
+  const isSub = equip.변압기수량 > 0;
+  // 선택된 모든 점검구분의 항목 조회 후 병합
+  if (!S.checkItemsCache) S.checkItemsCache = {};
+  let allItems = [];
+  for (const ty of S.inspTypes) {
+    const cacheKey = `${site?.설비구분||''}_${ty}_${site?.측정프로필||''}`;
+    if (!S.checkItemsCache[cacheKey]) {
+      const items = await fetchCheckItems(site, ty);
+      S.checkItemsCache[cacheKey] = items || [];
+    }
+    const items = S.checkItemsCache[cacheKey];
+    if (items?.length) allItems = allItems.concat(items);
+  }
+  // 중복 항목ID 제거
+  const seen = {};
+  S.checkItems = allItems.filter(it => { if (seen[it.항목ID]) return false; seen[it.항목ID] = 1; return true; });
+  const sections = {};
+  S.checkItems.forEach(item => {
+    if (!sections[item.섹션]) sections[item.섹션] = [];
+    sections[item.섹션].push(item);
+  });
+  renderInspSection(S.inspTypes, site, equip, isLow, isSub, sections);
+}
+// onclick 속성 안에 들어갈 문자열 이스케이프 (항목명에 따옴표가 있어도 안 깨지게)
+function escAttr(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+}
+
+function renderOXRow(item) {
+  const id    = item.항목ID;
+  const nameA = escAttr(item.항목명);          // onclick 인자용
+  const need  = Number(item.최소사진수) || 0;  // 점검항목관리 N열
+
+  // 사진 버튼 — 최소 매수가 정해져 있으면 여러 장 선택, 아니면 1장
+  const camBtn = item.사진허용
+    ? `<button class="cam-btn" id="cam_item_${id}" type="button" onclick="takeItemPhotoMulti('item_${id}','${nameA}',${need || 1})">📷</button>`
+    : '';
+
+  // 필수 사진 매수 배지
+  const badge = need > 0
+    ? `<span class="photo-req-badge" id="pbadge_item_${id}">📷 ${need}장 필요</span>`
+    : '';
+
+  const triBtn = item.입력유형 === 'OX'
+    ? `<button type="button" class="ox-btn t" onclick="setOX('item_${id}','△')">△</button>` : '';
+
+  // 「해당없음(/)」 — OX2_NA 항목에서 설비가 없는 발전소용 (H-13)
+  //   예전에는 naBtn = '' 로 고정되어 버튼이 아예 그려지지 않았습니다.
+  const naBtn = item.입력유형 === 'OX2_NA'
+    ? `<button type="button" class="ox-btn na" onclick="setOX('item_${id}','/')" title="해당 설비 없음">/</button>` : '';
+
+  return `<div class="ox-row" id="row_item_${id}">
+    <div class="ox-name"><span>${item.항목명}</span>${badge}</div>
+    <div class="ox-cam">
+      <div class="ox-grp">
+        <button type="button" class="ox-btn o" onclick="setOX('item_${id}','O')">O</button>
+        <button type="button" class="ox-btn x" onclick="setOX('item_${id}','X')">X</button>
+        ${triBtn}${naBtn}
+      </div>
+      ${camBtn}
+    </div>
+    <input type="hidden" id="item_${id}" value="">
+  </div>`;
+}
+
+function renderOXInline(id) {
+  return `<div style="display:flex;gap:.3rem;margin-top:.3rem;">
+    <button type="button" class="ox-btn o" onclick="setOX('${id}','O')">O</button>
+    <button type="button" class="ox-btn x" onclick="setOX('${id}','X')">X</button>
+    <button type="button" class="ox-btn t" onclick="setOX('${id}','△')">△</button>
+    <input type="hidden" id="${id}" value="">
+  </div>`;
+}
+
+function setOX(id, val) {
+  const inp = document.getElementById(id);
+  if (inp) inp.value = val;
+  const row = inp?.closest('.ox-row') || inp?.parentElement;
+  if (!row) return;
+  row.querySelectorAll('.ox-btn').forEach(b => b.classList.remove('sel'));
+  const map = {'O':'o','X':'x','△':'t','/':'na'};
+  const cls = map[val];
+  if (cls) { const btn = row.querySelector(`.ox-btn.${cls}`); if (btn) btn.classList.add('sel'); }
+}
+function renderDefaultCheckItems(inspType) {
+  const type = inspType || '월차점검';
+  const defaults = {
+    '월차점검': [
+      {id:'mod_st',   name:'모듈(어레이) 및 구조물 상태확인',              type:'OX2',    minPhoto:2, photoLabel:'어레이·구조물 사진 2장 이상 필수'},
+      {id:'inv_st',   name:'인버터 정상가동 상태확인',                     type:'OX2',    minPhoto:1, photoLabel:'인버터별 사진 필수', photoPerInv:true},
+      {id:'elec_st',  name:'전기설비(배전반 및 전기실) 상태확인',          type:'OX2',    minPhoto:2, photoLabel:'전기실 사진 2장 이상 필수'},
+      {id:'relay_st', name:'보호계전기 상태 및 배선케이블 이상확인',       type:'OX2',    minPhoto:0, photoLabel:''},
+      {id:'jbox_st',  name:'접속반(내부상태 및 FUSE단락여부) 상태확인',   type:'OX2_NA', minPhoto:2, photoLabel:'접속반 사진 2장 이상 필수'},
+      {id:'site_st',  name:'부지상태(진입로/휀스/배수로/저류지 등) 확인', type:'OX2',    minPhoto:1, photoLabel:'진입로·휀스·배수로·저류지 각 사진 필수'},
+      {id:'weed_st',  name:'제초상태 확인',                                type:'OX2',    minPhoto:0, photoLabel:''},
+    ],
+    '측정': [
+      {id:'active_pw',   name:'유효전력(kW)',   type:'숫자', unit:'kW'},
+      {id:'reactive_pw', name:'무효전력(kVar)',  type:'숫자', unit:'kVar'},
+      {id:'apparent_pw', name:'피상전력(kVA)',   type:'숫자', unit:'kVA'},
+      {id:'pf',          name:'역률(%)',         type:'숫자', unit:'%'},
+      {id:'freq',        name:'주파수(Hz)',       type:'숫자', unit:'Hz'},
+    ],
+    '긴급출동': [
+      {id:'fault_desc',   name:'장애 현상',     type:'텍스트'},
+      {id:'fault_cause',  name:'원인 분석',     type:'텍스트'},
+      {id:'fault_action', name:'조치 내용',     type:'텍스트'},
+      {id:'fault_prevent',name:'재발 방지 대책',type:'텍스트'},
+    ],
+    '열화상촬영': [] 
+  };
+
+  const items = defaults[type] || defaults['월차점검'];
+  if (!items.length) return ''; 
+
+  let html = `<div class="ox-table">`;
+  items.forEach(item => {
+    if (item.type === 'OX2' || item.type === 'OX2_NA') {
+      const isNA  = item.type === 'OX2_NA';
+      // ⚠️ 예전 else 분기는 백틱 안에서 \${…} 로 잘못 이스케이프되어 있어
+      //    화면에 "${getCamBadge('item_' + item.id)}" 가 글자 그대로 찍혔습니다. (M-1)
+      //    오프라인에서 점검항목을 못 받아오면 이 폴백이 실제로 실행됩니다.
+      const nameA = escAttr(item.name);
+      const need  = item.minPhoto || 0;
+      const camBtn = `<button type="button" class="cam-btn" id="cam_item_${item.id}"
+            onclick="takeItemPhotoMulti('item_${item.id}','${nameA}',${need || 1})">📷</button>`;
+
+      html += `<div class="ox-row" id="row_item_${item.id}">
+        <div class="ox-name">
+          <span>${item.name}</span>
+        </div>
+        <div class="ox-cam">
+          <div class="ox-grp">
+            <button type="button" class="ox-btn o" onclick="setOX('item_${item.id}','O')">O</button>
+            <button type="button" class="ox-btn x" onclick="setOX('item_${item.id}','X')">X</button>
+            
+          </div>
+          ${camBtn}
+        </div>
+        <input type="hidden" id="item_${item.id}" value="">
+      </div>`;
+    } else if (item.type === '숫자') {
+      html += `</div><div class="fg">
+        <label>${item.name}</label>
+        <input type="text" id="item_${item.id}" inputmode="decimal" placeholder="${item.unit||''}" oninput="handleSmartInput(this)">
+      </div><div class="ox-table">`;
+    } else if (item.type === '선택') {
+      html += `</div><div class="fg"><label>${item.name}</label>
+        <select id="item_${item.id}">${(item.opts||[]).map(o=>`<option>${o}</option>`).join('')}</select>
+      </div><div class="ox-table">`;
+    } else {
+      html += `</div><div class="fg"><label>${item.name}</label>
+        <textarea id="item_${item.id}" placeholder="${item.name}"></textarea>
+      </div><div class="ox-table">`;
+    }
+  });
+  html += `</div>`;
+  return html;
+}
+
+
+// 사진 1장 (항목별 O/X 옆 📷 버튼)
+function takeItemPhoto(itemId, label) {
+  openPhotoInput(itemId, label, 1, false);
+}
+
+// 사진 여러 장 (최소 매수가 정해진 항목)
+function takeItemPhotoMulti(itemId, label, minCount) {
+  openPhotoInput(itemId, label, minCount, true);
+}
+
+/**
+ * 사진 추가 공통 루틴 (H-11)
+ *  1) 기기 기본 메뉴에서 촬영/보관함 선택 (openImagePicker)
+ *  2) 고른 사진을 압축해서 S.photoMap 에 담음
+ *  3) 용량이 얼마나 줄었는지 안내
+ */
+function openPhotoInput(itemId, label, minCount, multiple) {
+  openImagePicker(multiple, async (files) => {
+    if (!files.length) return;
+    if (!S.photoMap[itemId]) S.photoMap[itemId] = [];
+
+    toast(`사진 처리 중... (${files.length}장)`);
+    let saved = 0, before = 0, after = 0;
+    for (const f of files) {
+      const b64 = await compressImage(f);
+      if (!b64) continue;
+      before += f.size;
+      after  += dataUrlBytes(b64);
+      S.photoMap[itemId].push({ base64: b64, filename: f.name, label: label });
+      saved++;
+    }
+    updatePhotoCount(itemId, minCount);
+
+    if (saved === 0) { toast('사진을 읽지 못했습니다. 다시 시도해 주세요.'); return; }
+    toast(`📷 ${label} ${saved}장 추가 · ${fmtSize(before)} → ${fmtSize(after)}`);
+    // 사진은 용량이 커서 유실 시 손해가 큽니다 — 디바운스 없이 바로 저장
+    if (typeof saveDraftNow === 'function') saveDraftNow();
+  });
+}
+
+function updatePhotoCount(itemId, minCount) {
+  const photos = S.photoMap[itemId] || [];
+  const count  = photos.length;
+  const btn = document.getElementById(`cam_${itemId}`) || document.getElementById(`cam_item_${itemId}`);
+  if (btn) {
+    btn.innerHTML = `📷${count > 0 ? `<span class="cam-count"> ${count}</span>` : ''}`;
+    const isSatisfied = minCount ? count >= minCount : count > 0;
+    btn.classList.toggle('done', isSatisfied);
+    btn.style.borderColor = isSatisfied ? 'var(--ok)' : '';
+  }
+  const badge = document.getElementById(`pbadge_${itemId}`);
+  if (badge) {
+    badge.classList.toggle('satisfied', count >= (minCount || 1));
+  }
+}
+/**
+ * 필수 사진 매수 검증 (H-4)
+ *  기준은 점검항목관리 시트의 「최소사진수」(N열)입니다.
+ *  ⚠️ 예전에는 mod_st·inv_st 같은 폴백 경로의 항목ID가 하드코딩되어 있어,
+ *     실제 시트 항목ID(V_MODULE 등)와 맞지 않아 호출해도 아무것도 검증하지 못했습니다.
+ */
+function validateRequiredPhotos() {
+  const errors = [];
+  (S.checkItems || []).forEach(item => {
+    const need = Number(item.최소사진수) || 0;
+    if (!need) return;
+
+    const id = 'item_' + item.항목ID;
+    const el = document.getElementById(id);
+    if (!el) return;               // 화면에 없는 항목은 검증 대상 아님
+    if (el.value === '/') return;  // 「해당없음」이면 사진 면제
+
+    const cnt = (S.photoMap[id] || []).length;
+    if (cnt < need) errors.push(`${item.항목명} — ${need}장 필요 (현재 ${cnt}장)`);
+  });
+  return errors;
+}
+async function autoWeather() {
+  const site = S.currentSite;
+  if (!site) return;
+  const addr = [site.설비위치||'', site.시군||'', site.읍면동||''].join(' ').trim();
+  toast('날씨 조회 중...');
+  // 좌표가 있으면 함께 보냅니다 — 시/군 단위 조회보다 훨씬 정확합니다
+  const r = await api('getWeather', { address: addr, lat: site.위도 || '', lng: site.경도 || '' });
+  if (r?.success) {
+    document.getElementById('f_weather').value = r.weather;
+    document.getElementById('f_temp').value = r.temp;
+    const note = r.source === '시군' ? ' (시/군 기준)' : '';
+    toast(`✅ ${r.weather} ${r.temp}°C${note}`);
+  } else {
+    toast('날씨 조회 실패 — 수동 입력해 주세요');
+  }
+}
+/**
+ * 점검회차 선택칸 구성 (H-8)
+ *  예전에는 무조건 "1회차"로 하드코딩되어 있었습니다.
+ *  이제 이번 달 제출 이력 수를 보고 다음 회차를 기본값으로 잡고, 필요하면 바꿀 수 있습니다.
+ */
+/**
+ * 전월 송전전력 자동 입력
+ *  전월송전전력은 매월 1회차에 송전용 계량기에서 확인해 기록하고,
+ *  다음 달 1회차까지 같은 값을 씁니다.
+ *  따라서 2회차 이상에서는 그 달 1회차에 적은 값을 그대로 가져옵니다.
+ */
+function autoFillPrevPower() {
+  const el   = document.getElementById('f_prev_power');
+  const hint = document.getElementById('prevPowerHint');
+  if (!el) return;
+  if (hint) hint.innerHTML = '';
+  if (S.editing) return;        // 수정 모드는 원래 기록값을 그대로 둡니다
+  if (el.value) return;         // 이미 입력한 값이 있으면 건드리지 않습니다
+
+  const list = (S.siteInspections || []).slice().sort((a, b) => a.seq - b.seq);
+  const first = list.find(it => it.전월송전전력);
+
+  if (!first) {
+    // 이번 달 첫 점검 — 계량기에서 직접 확인해야 합니다
+    if (hint) hint.innerHTML = '<span style="color:var(--warn);">📟 이번 달 첫 점검입니다. 송전용 계량기에서 확인해 입력하세요.</span>';
+    return;
+  }
+
+  el.value = first.전월송전전력;
+  if (hint) {
+    hint.innerHTML = '<span style="color:var(--ok);">✅ ' + first.seq
+      + '회차 값 자동 입력됨 (같은 달은 동일) · 필요하면 수정하세요</span>';
+  }
+}
+
+async function calcSeq() {
+  const site = S.currentSite;
+  const el = document.getElementById('f_seq');
+  if (!site || !el) return;
+
+  const total = Number(site.점검회차) || 1;
+  const done  = (S.siteInspections || []).length;
+
+  // 수정 모드면 원래 값을, 신규면 다음 회차를 기본 선택
+  let want = '';
+  if (S.editing && S.editing.점검회차현황) {
+    want = S.editing.점검회차현황;
+  } else {
+    want = `${Math.min(done + 1, Math.max(total, done + 1))}회차/${total}회`;
+  }
+
+  const max = Math.max(total, done + 1);
+  let html = '';
+  for (let i = 1; i <= max; i++) {
+    const v = `${i}회차/${total}회`;
+    html += `<option value="${v}"${v === want ? ' selected' : ''}>${v}</option>`;
+  }
+  // 이력에 없던 형식이면(과거 데이터 등) 그 값도 선택지에 넣어 유실 방지
+  if (want && html.indexOf(`value="${want}"`) < 0) {
+    html = `<option value="${want}" selected>${want}</option>` + html;
+  }
+  el.innerHTML = html;
+}
+// ===== 개발자(테스트) 전용 난수 자동입력 =====
+/**
+ * 채널 수치 자동입력(🎲) 버튼 표시 여부
+ *  기준: 직원관리 시트의 「자동입력허용」 열 (Y 인 사람에게만 표시)
+ *
+ *  ⚠️ 여기에 토큰 값을 절대 적지 마세요.
+ *     버전 56부터 토큰은 곧 비밀번호입니다. 화면 코드는 누구나 볼 수 있으므로
+ *     토큰을 적어두면 그 사람 행세를 할 수 있게 됩니다.
+ *     (예전에 있던 하드코딩 대비책은 이 이유로 제거했습니다)
+ *
+ *  🎲 가 안 보이면 → 직원관리 시트에 「자동입력허용」 열을 만들고 Y 를 넣으세요.
+ */
+function isDevUser() {
+  return !!(S.user && S.user.devMode === true);
+}
+function randomFill(targetId, count) {
+  const el = document.getElementById(targetId);
+  if (!el) return;
+
+  let modal = document.getElementById('randomFillModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'randomFillModal';
+    modal.innerHTML = `
+      <div style="max-width:320px;width:90%;padding:1.2rem;border-radius:14px;background:#fff;box-shadow:0 10px 25px rgba(0,0,0,0.25);">
+        <div style="font-weight:700;font-size:1.02rem;margin-bottom:.8rem;color:var(--pri);display:flex;align-items:center;gap:.4rem;">
+          🎲 채널 수치 범위 지정
+        </div>
+        <div style="margin-bottom:.6rem;">
+          <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:.2rem;">최저값 (예시: 2.0)</label>
+          <input type="text" id="rf_min" inputmode="decimal" placeholder="예시: 2.0" style="width:100%;height:2.6rem;padding:.4rem .6rem;border:1.5px solid var(--border);border-radius:8px;font-size:1rem;" oninput="handleSmartInput(this)">
+        </div>
+        <div style="margin-bottom:1rem;">
+          <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:.2rem;">최대값 (예시: 3.5)</label>
+          <input type="text" id="rf_max" inputmode="decimal" placeholder="예시: 3.5" style="width:100%;height:2.6rem;padding:.4rem .6rem;border:1.5px solid var(--border);border-radius:8px;font-size:1rem;" oninput="handleSmartInput(this)">
+        </div>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end;">
+          <button type="button" class="btn btn-out btn-sm" id="rf_cancel_btn" style="padding:.4rem .8rem;">취소</button>
+          <button type="button" class="btn btn-pri btn-sm" id="rf_confirm_btn" style="padding:.4rem .8rem;background:var(--pri);color:#fff;border:none;">확인 (기록)</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  const minInput = modal.querySelector('#rf_min');
+  const maxInput = modal.querySelector('#rf_max');
+  minInput.value = '';
+  maxInput.value = '';
+
+  modal.style.display = 'flex';
+  modal.style.position = 'fixed';
+  modal.style.top = '0'; modal.style.left = '0'; modal.style.width = '100vw'; modal.style.height = '100vh';
+  modal.style.zIndex = '99999';
+  modal.style.alignItems = 'center'; modal.style.justifyContent = 'center'; modal.style.background = 'rgba(0,0,0,0.45)';
+
+  setTimeout(() => { minInput.focus(); }, 150);
+
+  const confirmBtn = modal.querySelector('#rf_confirm_btn');
+  const cancelBtn = modal.querySelector('#rf_cancel_btn');
+
+  const cleanup = () => { modal.style.display = 'none'; };
+  cancelBtn.onclick = cleanup;
+
+  confirmBtn.onclick = () => {
+    const minVal = parseFloat(minInput.value.trim());
+    const maxVal = parseFloat(maxInput.value.trim());
+    if (isNaN(minVal) || isNaN(maxVal) || minVal > maxVal) {
+      toast('⚠️ 올바른 수치 범위를 입력하세요');
+      return;
+    }
+    const vals = [];
+    for (let i = 0; i < count; i++) {
+      vals.push((minVal + Math.random() * (maxVal - minVal)).toFixed(1));
+    }
+    el.value = vals.join('/');
+    el.dispatchEvent(new Event('input'));
+    cleanup();
+    toast(`🎲 ${count}개 채널 수치 자동 기록 완료 (${minVal}~${maxVal}A)`);
+  };
+}
+
+// 채널 입력창 포커스 시 커서를 맨 끝으로 이동 (모바일에서 끝으로 이동 어려움 해결)
+document.addEventListener('focusin', function(e) {
+  const el = e.target;
+  if (el && el.classList && el.classList.contains('ch-input')) {
+    setTimeout(function() {
+      try {
+        const len = el.value.length;
+        el.setSelectionRange(len, len);
+        el.scrollLeft = el.scrollWidth; // 가로 스크롤도 끝으로
+      } catch(_) {}
+    }, 50);
+  }
+});
+
+function findChStatus(el) {
+  // 상태 표시 요소: .ch-row 구조 또는 묶음 카드(.fg) 내 .ch-status
+  return el.closest('.ch-row')?.querySelector('.ch-status')
+      || el.closest('.fg')?.querySelector('.ch-status')
+      || el.parentElement?.querySelector('.ch-status');
+}
+function autoSlash(el, maxCnt) {
+  const before = el.value;
+  const atEnd = el.selectionStart >= before.length - 1; // 커서가 끝 근처에 있었는지
+  // 음성 받아쓰기 결과 정규화: "점"→"." 처리
+  if (el.dataset.voiceMode) {
+    el.value = el.value.replace(/점/g, '.').replace(/[^\d.\s/]/g, '');
+  }
+  // 아이폰 키패드에 / 없음 → ".."(점2) 또는 스페이스를 /로 변환
+  el.value = el.value.replace(/\.\./g,'/').replace(/ /g,'/').replace(/\/+/g,'/').replace(/\/\./g,'/');
+  // 변환으로 값이 바뀌었고 커서가 끝에 있었다면 커서를 끝으로 유지
+  if (el.value !== before && atEnd) {
+    try { el.setSelectionRange(el.value.length, el.value.length); } catch(_) {}
+  }
+  const parts = el.value.split('/').filter(p=>p!=='');
+  const st = findChStatus(el);
+  if (!st) return;
+  if (parts.length > maxCnt) { st.textContent=`⚠️ 채널 초과 (${parts.length}/${maxCnt})`; st.style.color='var(--ng)'; }
+  else { st.textContent=parts.length>0?`${parts.length}/${maxCnt}번째 입력 중 · 마지막값 ${parts[parts.length-1]}`:''; st.style.color='var(--ok)'; }
+}
+
+// slot: 1-based No번호 (배열 인덱스 아님 — N-1)
+async function validateCh(el, maxCnt, label, slot) {
+  let v = el.value.replace(/\/$/,'');
+  el.value = v;
+  const parts = v.split('/').filter(p=>p!=='');
+  const nums = parts.map(Number).filter(n=>!isNaN(n)&&n>0);
+  const st = findChStatus(el);
+  if (!st) return;
+  if (nums.length === 0) return;
+  // 입력 개수만 표시 (이상값 판단은 서버에서 수행 → 검토사항 기록)
+  st.textContent=`${nums.length}/${maxCnt} 입력`;
+  st.style.color='var(--ok)';
+  if (nums.length !== maxCnt && nums.length > 0) {
+    if (confirm(`${label||'접속반'} 채널 수가 설정값(${maxCnt})과 다릅니다.\n실측값(${nums.length})으로 업데이트할까요?`)) {
+      await api('updateChannelCount', {no: S.currentSite?.no, slot: slot, newCount: nums.length, newLabel: label});
+      toast(`✅ 채널 수 ${nums.length}로 업데이트`);
+      S.currentEquip = await api('getEquipInfo', {no: S.currentSite?.no});
+    }
+  }
+}
+function toggleAction(v) {
+  document.getElementById('actionDetail').style.display = v==='없음'?'none':'block';
+  document.getElementById('vendorWrap').style.display = v==='업체서비스요청'?'block':'none';
+}
+// ⚠️ 여기에 있던 구버전 takeItemPhoto()를 삭제했습니다. (H-11)
+//    capture='environment' 로 카메라만 열려 사진보관함을 쓸 수 없었고, 압축도 없었습니다.
+//    새 구현은 237행. 같은 이름을 두 번 선언하면 나중 것이 이깁니다 — C-3와 같은 함정이니 주의하세요.
+
+function collectFormData() {
+  const site  = S.currentSite;
+  const equip = S.currentEquip || {};
+  const items = {};
+  S.checkItems.forEach(item => {
+    const el = document.getElementById(`item_${item.항목ID}`);
+    if (el) items[item.항목ID] = el.value;
+  });
+  document.querySelectorAll('[id^="item_"]').forEach(el => {
+    const key = el.id.replace('item_','');
+    if (key.endsWith('_memo')) return; 
+    if (!(key in items)) items[key] = el.value;
+  });
+  document.querySelectorAll('[id$="_memo"]').forEach(el => {
+    const baseKey = el.id.replace('item_','').replace('_memo','');
+    const valEl = document.getElementById(`item_${baseKey}`);
+    if (valEl?.value === 'X' && el.value.trim()) {
+      items[`${baseKey}_memo`] = el.value.trim();
+    }
+  });
+
+  // ── C-1: 호기·접속반별 값을 항목당 한 열로 묶습니다 ──
+  //  예전에는 item_R_ACB_V_1, _2 … 가 각각 별도 열이 되어
+  //  접속반 21개짜리 발전소에서는 항목 하나가 21열을 차지했습니다.
+  //  (최대 60열까지 증식 가능)
+  //  이제 R_ACB_V 한 열에 "1호기값 | 2호기값" 형태로 담습니다.
+  //  3상 내부 구분자(/)는 그대로 두고, 호기·접속반은 " | " 로 나눕니다.
+  const MULTI_TYPES = ['3상', '숫자반복', '채널반복'];
+  (S.checkItems || [])
+    .filter(it => MULTI_TYPES.indexOf(it.입력유형) >= 0)
+    .forEach(it => {
+      const base = it.항목ID;
+      const vals = [];
+      for (let n = 1; n <= 30; n++) {
+        const el = document.getElementById(`item_${base}_${n}`);
+        if (!el) break;
+        vals.push(String(el.value || '').trim());
+        delete items[`${base}_${n}`];      // 개별 키 제거 → 열 증식 차단
+      }
+      while (vals.length && !vals[vals.length - 1]) vals.pop();  // 뒤쪽 빈칸 정리
+      if (vals.length) items[base] = vals.join(' | ');
+    });
+  const channels = {};
+  if (equip.channels) {
+    equip.channels.forEach((ch, i) => {
+      // DOM id는 배열 인덱스, 시트 컬럼명은 slot(No번호) — 둘을 혼동하면 안 됩니다 (N-1)
+      const v = document.getElementById(`ch_${i}`)?.value || '';
+      if (v) channels[`No${ch.slot || i + 1}`] = v;
+    });
+  }
+  // 스트링 인버터별 측정값 (누적발전량/현재발전량/전압/전류)
+  const invParts = [];
+  const invCnt = (equip.channels?.length) || (equip.인버터수량||0);
+  for (let i = 1; i <= invCnt; i++) {
+    const kwh = document.getElementById(`inv_kwh_${i}`)?.value || '';
+    const kw  = document.getElementById(`inv_kw_${i}`)?.value || '';
+    const v   = document.getElementById(`inv_v_${i}`)?.value || '';
+    const a   = document.getElementById(`inv_a_${i}`)?.value || '';
+    if (kwh) invParts.push(kwh);
+    if (kwh) items[`inv_kwh_${i}`] = kwh;
+    if (kw)  items[`inv_kw_${i}`]  = kw;
+    if (v)   items[`inv_v_${i}`]   = v;
+    if (a)   items[`inv_a_${i}`]   = a;
+  }
+  // 변압기 온도: 1대 = tr_temp_1, 2대 이상 = tr_temp_multi ("/" 구분)
+  const trMulti = document.getElementById('tr_temp_multi')?.value || '';
+  if (trMulti) {
+    trMulti.split('/').forEach((v, i) => { items[`tr_temp_${i+1}`] = v.trim(); });
+  } else {
+    for (let i = 1; i <= (equip.변압기수량||0); i++) {
+      items[`tr_temp_${i}`] = document.getElementById(`tr_temp_${i}`)?.value || '';
+    }
+  }
+
+  return {
+    no:            site.no,
+    설비명칭:      site.name,
+    점검일자:      document.getElementById('f_date')?.value || '',
+    점검시각:      document.getElementById('f_time')?.value || '',
+    점검유형:      '정기',
+    점검구분:      currentInspType,
+    점검자:        S.user?.name || '',
+    날씨:          document.getElementById('f_weather')?.value || '',
+    기온:          document.getElementById('f_temp')?.value || '',
+    전월송전전력:  document.getElementById('f_prev_power')?.value || '',
+    현재송전전력:  document.getElementById('f_curr_power')?.value || '',
+    인버터발전량:  invParts.filter(Boolean).join('/') || document.getElementById('f_inv_kwh')?.value || '',
+    점검회차현황:  document.getElementById('f_seq')?.value || '',
+    종합점검결과:  document.getElementById('f_result')?.value || '',   // H-5
+    조치구분:      document.getElementById('f_action')?.value || '없음',
+    조치내용:      document.getElementById('f_action_detail')?.value || '',
+    요청업체:      document.getElementById('f_vendor')?.value || '',
+    특이사항:      document.getElementById('f_note')?.value || '',
+    items, channels
+  };
+}
+function setSubmitBusy(busy, text) {
+  const btn = document.querySelector('#mt-form .btn-ok');
+  if (!btn) return;
+  btn.disabled = !!busy;
+  // 수정 모드에서는 버튼 문구가 「수정 저장」으로 유지되어야 합니다
+  const idle = (S.editing && S.editing.inspId) ? '💾 수정 저장' : '📤 제출';
+  btn.innerHTML = busy ? `<span class="spin"></span> ${text || '처리 중...'}` : idle;
+}
+
+/**
+ * 점검 제출 (H-12)
+ *  1) 무조건 대기함에 먼저 저장 — 어떤 경우에도 입력 내용이 사라지지 않게 하는 안전망
+ *  2) 오프라인이면 여기서 종료 (연결되면 자동 전송)
+ *  3) 온라인이면 서버 응답을 "기다려서" 성공/실패를 명확히 알려줌
+ *
+ * ⚠️ 이전에는 온라인이어도 "대기함에 저장되었습니다"만 뜨고 모달이 닫혔습니다.
+ *    뒤에서 도는 전송이 실패해도 조용히 넘어가서, 점검원은 제출됐다고 믿는데
+ *    서버에는 기록이 없는 상황이 생길 수 있었습니다.
+ */
+async function submitForm() {
+  const d = collectFormData();
+  if (!d.점검일자) return toast('점검일자를 입력하세요');
+
+  // 필수 사진 검증 (H-4)
+  //  현장 흐름을 끊지 않도록 확인창은 띄우지 않습니다.
+  //  제출은 그대로 진행하고, 부족 내역만 서버 「검토메모」에 남겨 관리자가 확인합니다.
+  const shortage = validateRequiredPhotos();
+  if (shortage.length) d.photoShortage = shortage;
+
+  // 수정 모드는 별도 경로 — 대기함을 거치지 않고 서버 행을 직접 갱신합니다
+  if (S.editing && S.editing.inspId) return submitEdit(d);
+
+  setSubmitBusy(true, '저장 중...');
+  try {
+    // 1) 로컬 대기함에 저장 — 이게 성공해야 데이터가 안전합니다
+    const saved = await saveInspectionToOfflineQueue(d);
+    if (!saved) {
+      // ⚠️ 저장 실패인데 초안을 지우면 입력이 통째로 사라집니다.
+      //    초안을 그대로 두고 사용자에게 알립니다.
+      showSubmitFailBox({ error: '기기에 저장하지 못했습니다. 저장공간을 확인하고 다시 시도해 주세요.' });
+      return;
+    }
+
+    // 2) 저장이 확인된 뒤에만 작성 중 초안을 정리합니다
+    await deleteDraft(d.no);
+
+    // 3) 화면은 즉시 놓아줍니다 — 다음 점검을 바로 시작할 수 있어야 합니다.
+    //    서버 전송은 백그라운드에서 진행되고, 결과는 「내 점검」과 토스트로 알립니다.
+    closeModal();
+    toast(S.isOnline
+      ? '📤 제출 접수 — 전송은 백그라운드에서 진행됩니다'
+      : '📡 오프라인 — 연결되면 자동 전송됩니다', 3000);
+
+    if (S.isOnline) {
+      // await 하지 않습니다. 기다리면 다음 점검이 막힙니다.
+      setTimeout(function () { autoFlushSubmits(false); }, 300);
+    }
+  } catch (err) {
+    console.warn('제출 처리 중 오류:', err);
+    showSubmitFailBox({ error: err && err.message ? err.message : String(err) });
+  } finally {
+    setSubmitBusy(false);
+  }
+}
+
+// S.photoMap 에 담긴 사진을 업로드용 배열로 변환
+function collectPhotoPayload(d) {
+  const out = [];
+  const site = S.currentSite || {};
+  const isThermal = (S.inspTypes || []).indexOf('열화상촬영') >= 0;
+  Object.entries(S.photoMap || {}).forEach(([itemId, list]) => {
+    (list || []).forEach(ph => {
+      out.push({
+        base64: ph.base64,
+        filename: ph.filename || `photo_${Date.now()}.jpg`,
+        no: d.no || site.no || '',
+        설비명칭: d.설비명칭 || site.name || '미지정',
+        itemId: itemId,
+        itemName: ph.label || getCheckItemLabel(itemId),
+        uploader: d.점검자 || S.user?.name || '',
+        photoType: (/thermal/i.test(itemId) || isThermal) ? '열화상촬영' : ''
+      });
+    });
+  });
+  return out;
+}
+
+/**
+ * 제출된 점검 수정 저장
+ *  · 서버의 같은 행을 덮어씁니다 (수정일시·수정자 기록)
+ *  · 새로 추가한 사진만 업로드하고 기존 사진은 건드리지 않습니다
+ */
+async function submitEdit(d) {
+  if (!S.isOnline) { toast('수정은 온라인에서만 가능합니다.'); return; }
+
+  setSubmitBusy(true, '수정 저장 중...');
+  try {
+    d.inspId = S.editing.inspId;
+    const r = await api('updateInspection', d);
+    if (!r || !r.success) { showSubmitFailBox(r); return; }
+
+    // 새로 추가한 사진만 업로드
+    let pOk = 0, pFail = 0;
+    const photos = collectPhotoPayload(d);
+    if (photos.length) {
+      setSubmitBusy(true, `사진 ${photos.length}장 업로드 중...`);
+      for (const ph of photos) {
+        ph.inspId = r.inspId;
+        const pr = await api('uploadPhoto', ph);
+        if (pr && pr.success) pOk++; else pFail++;
+      }
+    }
+
+    let msg = `✅ 수정 저장 완료 (${r.inspId})`;
+    if (pOk > 0)   msg += ` · 사진 ${pOk}장 추가`;
+    if (pFail > 0) msg += ` · ⚠️ ${pFail}장 실패`;
+    toast(msg, 5000);
+
+    S.editing = null;
+    S.photoMap = {};
+    closeModal();
+  } catch (err) {
+    console.warn('수정 저장 오류:', err);
+    showSubmitFailBox({ error: err && err.message ? err.message : String(err) });
+  } finally {
+    setSubmitBusy(false);
+  }
+}
+
+// 전송 실패 안내 + 재시도
+function showSubmitFailBox(r) {
+  let box = document.getElementById('submitFailBox');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'submitFailBox';
+    box.style.cssText = 'display:none;position:fixed;inset:0;z-index:99997;'
+      + 'background:rgba(0,0,0,.45);align-items:center;justify-content:center;padding:1rem;';
+    document.body.appendChild(box);
+  }
+  const detail = (r && r.error) ? String(r.error).slice(0, 200) : '';
+  box.innerHTML =
+      '<div style="background:#fff;border-radius:14px;padding:1.2rem;max-width:340px;width:100%;">'
+    + '<div style="font-weight:700;color:var(--ng);margin-bottom:.6rem;">⚠️ 서버 전송 실패</div>'
+    + '<div style="font-size:.88rem;color:#334155;line-height:1.55;margin-bottom:.9rem;">'
+    + '입력하신 내용은 <b>대기함에 안전하게 저장</b>되어 있습니다.<br>'
+    + '다시 시도하시거나, 나중에 자동 전송되도록 두셔도 됩니다.'
+    + (detail ? '<div style="margin-top:.6rem;font-size:.78rem;color:var(--muted);word-break:break-all;">' + detail + '</div>' : '')
+    + '</div>'
+    + '<button type="button" class="btn btn-pri" onclick="retrySubmit()">🔄 다시 시도</button>'
+    + '<button type="button" class="btn btn-out" onclick="submitFailClose()">나중에 (대기함 보관)</button>'
+    + '</div>';
+  box.style.display = 'flex';
+}
+
+function submitFailClose() {
+  const box = document.getElementById('submitFailBox');
+  if (box) box.style.display = 'none';
+  toast('📡 대기함에 보관했습니다. 연결이 안정되면 자동 전송됩니다.');
+  closeModal();
+}
+
+async function retrySubmit() {
+  const box = document.getElementById('submitFailBox');
+  if (box) box.style.display = 'none';
+
+  // 수정 모드는 대기함이 아니라 서버 행 갱신을 다시 시도합니다
+  if (S.editing && S.editing.inspId) return submitEdit(collectFormData());
+
+  setSubmitBusy(true, '다시 전송 중...');
+  try {
+    const r = await autoFlushSubmits(true);
+    if (r && r.ok > 0 && r.fail === 0) {
+      toast(`✅ 제출 완료${r.lastInspId ? ' (' + r.lastInspId + ')' : ''}`, 5000);
+      closeModal();
+    } else {
+      showSubmitFailBox(r);
+    }
+  } finally {
+    setSubmitBusy(false);
+  }
+}
+
+async function saveInspectionToOfflineQueue(d) {
+  const photos = [];
+  const site = S.currentSite || {};
+  const siteName = d.설비명칭 || site.name || '미지정';
+  const siteNo = d.no || site.no || '';
+  const uploaderName = d.점검자 || S.user?.name || '';
+  const isThermal = (S.inspTypes || []).indexOf('열화상촬영') >= 0;
+
+  if (S.photoMap) {
+    Object.entries(S.photoMap).forEach(([itemId, list]) => {
+      (list || []).forEach(ph => {
+        const isItemThermal = /thermal/i.test(itemId) || isThermal;
+        const labelStr = ph.label || getCheckItemLabel(itemId);
+        photos.push({
+          base64: ph.base64,
+          filename: ph.filename || `photo_${Date.now()}.jpg`,
+          no: siteNo,
+          설비명칭: siteName,
+          itemId: itemId,
+          itemName: labelStr,
+          uploader: uploaderName,
+          photoType: isItemThermal ? '열화상촬영' : ''
+        });
+      });
+    });
+  }
+
+  // 중복 저장 방지: 해당 발전소(d.no)의 기존 대기 기록 청소 후 최신 1건 유지
+  try {
+    const items = (await withIdb(db => new Promise(res => {
+      const req = db.transaction(IDB_SUBMIT, 'readonly').objectStore(IDB_SUBMIT).getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => res([]);
+    }))) || [];
+    const sameSiteItems = items.filter(it => it.payload?.data?.no == d.no);
+    if (sameSiteItems.length > 0) {
+      await withIdb(db => new Promise(res => {
+        const tx = db.transaction(IDB_SUBMIT, 'readwrite');
+        const store = tx.objectStore(IDB_SUBMIT);
+        sameSiteItems.forEach(it => store.delete(it.id));
+        tx.oncomplete = res; tx.onerror = res;
+      }));
+    }
+  } catch(e) { console.warn('대기함 중복 정제 실패', e); }
+
+  const queueObj = { payload: { data: d, photos: photos }, createdAt: Date.now() };
+
+  const saved = await withIdb(db => new Promise(res => {
+    const tx = db.transaction(IDB_SUBMIT, 'readwrite');
+    tx.objectStore(IDB_SUBMIT).add(queueObj);
+    tx.oncomplete = () => res(true);
+    tx.onerror = () => res(false);
+  }));
+
+  // ⚠️ 여기서 toast/closeModal 을 하지 않습니다. (H-12)
+  //    이 함수는 "로컬 저장"만 담당하고, 사용자에게 무엇을 보여줄지는
+  //    서버 전송 결과를 아는 submitForm() 이 판단합니다.
+  return saved;
+}
+
+
+
+async function saveLocal() {
+  const d = collectFormData();
+  const key = `draft_${d.no}_${d.점검일자}_${Date.now()}`;
+  localStorage.setItem(key, JSON.stringify(d));
+  toast('💾 임시 저장됨');
+}
+// ── 사진 탭 제거 (H-3) ──────────────────────────────────
+// renderPhotoSection / addTabPhoto / previewPhotos / uploadAllPhotos 를 삭제했습니다.
+// 모달 탭바가 항상 숨겨져 있어 사진 탭에 도달할 수 없었고,
+// 기능도 점검폼 안의 「항목별 사진」·「추가사진」과 중복이었습니다.
+// 사진 업로드는 제출 시 autoFlushSubmits() / submitEdit() 경로가 담당합니다.
+
+// saveQueueToDB() 도 함께 삭제했습니다 — 유일한 호출자가 uploadAllPhotos() 였습니다.
+// 그 결과 photoQ 스토어에는 더 이상 아무것도 쌓이지 않으므로
+// 화면 상단의 「대기 사진」 바(queueBar)는 항상 숨겨진 상태가 됩니다.
+// 사진은 점검 제출 시 대기함(submitQ)에 함께 담겨 전송됩니다.
+
+async function flushQueue() {
+  if (!S.isOnline) return toast('WiFi 연결 필요');
+  const items = (await withIdb(db => new Promise(res => {
+    const req = db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).getAll();
+    req.onsuccess = () => res((req.result || []).filter(i=>i.status==='pending'));
+    req.onerror = () => res([]);
+  }))) || [];
+  if (!items.length) return toast('대기 사진 없음');
+  const r = await api('flushPhotoQueue', {queue: items});
+  await withIdb(db => new Promise(res => {
+    const tx = db.transaction(IDB_STORE,'readwrite');
+    items.forEach(i => tx.objectStore(IDB_STORE).delete(i.id));
+    tx.oncomplete = res; tx.onerror = res;
+  }));
+  document.getElementById('queueBar').classList.remove('show');
+  toast(`✅ ${r?.uploaded||items.length}장 업로드 완료`);
+}
+function switchTab(name) {
+  ['list','mine','admin'].forEach(t => {
+    document.getElementById(`pane-${t}`)?.classList.toggle('active', t===name);
+  });
+  document.querySelectorAll('.tabs .tab').forEach((el, i) => {
+    el.classList.toggle('active', ['list','mine','admin'][i]===name);
+  });
+  if (name === 'form') buildForm(currentInspType);
+  if (name === 'admin') { loadCommonNotice(); loadAdminSummary(); }
+  if (name === 'mine') loadMineSummary();
+}
+
+// ── 이번 달 점검 현황 (내 점검) ──
+async function loadMineSummary() {
+  const el = document.getElementById('mineList');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--muted);"><span class="spin"></span> 불러오는 중...</div>';
+  // 이 기기의 임시저장·전송대기 현황을 먼저 보여줍니다 (점검원 본인이 확인해야 할 정보)
+  const device = await renderDeviceStatus();
+  const r = await api('getMonthlySummary', {});
+  const list = Array.isArray(r) ? r : [];
+  const mine = list.filter(s => !S.user?.name || s.manager === S.user.name);
+  const rows = (S.user?.role === '관리자' && mine.length === 0) ? list : mine;
+  if (!rows.length) { el.innerHTML = device + '<div style="padding:1rem;text-align:center;color:var(--muted);">데이터 없음</div>'; return; }
+  el.innerHTML = device + rows.map(s => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:.6rem .2rem;border-bottom:1px solid var(--border);font-size:.88rem;">
+      <div>
+        <div style="font-weight:600;">${s.name}</div>
+        <div style="font-size:.78rem;color:var(--muted);">${s.lastDate ? '최근 '+s.lastDate : '이번 달 점검 없음'}</div>
+      </div>
+      <span class="badge" style="background:${s.missing>0?'#fee2e2':'#dcfce7'};color:${s.missing>0?'#991b1b':'#166534'};">
+        ${s.done}/${s.required}회
+      </span>
+    </div>`).join('');
+}
+
+// ── 관리자 월간 현황 ──
+// ── 이 기기 상태 (임시저장 · 전송 대기) ──────────────────
+// 점검원 본인이 확인해야 하는 정보입니다. 「내 점검」 탭에 표시합니다.
+
+async function listStore(storeName) {
+  try {
+    return (await withIdb(db => new Promise(res => {
+      const req = db.transaction(storeName, 'readonly').objectStore(storeName).getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => res([]);
+    }))) || [];
+  } catch (_) { return []; }
+}
+
+function fmtWhen(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+async function renderDeviceStatus() {
+  const drafts  = await listStore(IDB_DRAFT);
+  const pending = await listStore(IDB_SUBMIT);
+  const info    = await getStorageInfo();
+
+  let html = '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;'
+           + 'padding:.75rem .85rem;margin-bottom:.75rem;font-size:.85rem;color:#334155;">'
+           + '<div style="font-weight:700;margin-bottom:.5rem;">📱 이 기기 상태</div>';
+
+  // 전송 대기 — 가장 중요합니다. 아직 서버에 없는 점검입니다.
+  if (pending.length) {
+    html += '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:.55rem .7rem;margin-bottom:.5rem;">'
+          + `<div style="color:#b45309;font-weight:700;">⏳ 전송 대기 ${pending.length}건</div>`
+          + '<div style="font-size:.8rem;color:#78350f;margin-top:.2rem;line-height:1.5;">'
+          + pending.map(p => `· ${p.payload?.data?.설비명칭 || '(이름없음)'} <span style="color:var(--muted);">${fmtWhen(p.createdAt)}</span>`).join('<br>')
+          + '</div>'
+          + '<button type="button" class="btn btn-pri btn-sm" style="width:100%;margin-top:.5rem;" onclick="flushPendingNow()">📤 지금 전송</button>'
+          + '</div>';
+  }
+
+  // 작성 중 임시저장 — 탭하면 이어서 작성
+  if (drafts.length) {
+    html += '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:.55rem .7rem;margin-bottom:.5rem;">'
+          + `<div style="color:#1d4ed8;font-weight:700;">📝 작성 중 ${drafts.length}건</div>`
+          + '<div style="font-size:.8rem;margin-top:.2rem;line-height:1.7;">'
+          + drafts.map(d => {
+              const cnt = Object.keys(d.photos || {}).reduce((a, k) => a + (d.photos[k] || []).length, 0);
+              return `· <a href="javascript:void(0)" onclick="openSite('${d.no}')" style="color:#1d4ed8;font-weight:600;">${d.설비명칭 || d.no}</a>`
+                   + ` <span style="color:var(--muted);">${fmtWhen(d.savedAt)}${cnt ? ' · 사진 ' + cnt + '장' : ''}</span>`;
+            }).join('<br>')
+          + '</div></div>';
+  }
+
+  if (!pending.length && !drafts.length) {
+    html += '<div style="color:var(--ok);">✅ 모두 전송 완료 · 작성 중인 점검 없음</div>';
+  }
+
+  // 저장 공간
+  if (info && info.quota) {
+    const pct = (info.usage / info.quota) * 100;
+    html += `<div style="font-size:.78rem;color:var(--muted);margin-top:.5rem;">`
+          + `저장공간 ${fmtSize(info.usage)} / ${fmtSize(info.quota)} (${pct.toFixed(1)}%)</div>`;
+    if (pct > 80) {
+      html += '<div style="color:var(--ng);font-weight:700;font-size:.8rem;margin-top:.3rem;">'
+            + '⚠️ 저장 공간이 부족합니다. 대기 중인 제출을 먼저 전송해 주세요.</div>';
+    }
+  }
+
+  return html + '</div>';
+}
+
+// 「지금 전송」 버튼
+async function flushPendingNow() {
+  if (!S.isOnline) return toast('인터넷 연결이 필요합니다.');
+  toast('전송 중...');
+
+  let r = await autoFlushSubmits(true);
+
+  // ⚠️ 연결이 복구되면 자동 전송이 먼저 시작됩니다.
+  //    그때 버튼을 누르면 이미 실행 중이라 건너뛰는데, 예전에는 그걸
+  //    "전송할 항목이 없습니다"로 잘못 안내했습니다.
+  if (r && r.skipped && r.error !== '오프라인') {
+    toast('이미 전송 중입니다. 잠시만 기다려 주세요...', 3000);
+    for (let i = 0; i < 20 && r.skipped; i++) {      // 최대 20초 대기
+      await new Promise(res => setTimeout(res, 1000));
+      r = await autoFlushSubmits(true);
+    }
+  }
+
+  if (r && r.ok > 0 && r.fail === 0)      toast(`✅ ${r.ok}건 전송 완료`);
+  else if (r && r.fail > 0)               toast(`⚠️ ${r.ok}건 성공, ${r.fail}건 실패 — 잠시 후 다시 시도해 주세요`, 5000);
+  else if (r && r.skipped)                toast('전송이 진행 중입니다. 잠시 후 다시 확인해 주세요.', 4000);
+  else                                    toast('전송할 항목이 없습니다.');
+
+  loadMineSummary();   // 목록 갱신
+}
+
+async function loadAdminSummary() {
+  const el = document.getElementById('adminContent');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--muted);"><span class="spin"></span> 불러오는 중...</div>';
+  const r = await api('getMonthlySummary', {});
+  const list = Array.isArray(r) ? r : [];
+  if (!list.length) { el.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--muted);">데이터 없음</div>'; return; }
+
+  S.adminSummary = list;
+
+  // 담당자별로 묶습니다 — 전체 나열은 한눈에 안 들어옵니다
+  const groups = {};
+  list.forEach(s => {
+    const m = String(s.manager || '').trim() || '(미배정)';
+    (groups[m] = groups[m] || []).push(s);
+  });
+
+  // 미완료가 많은 담당자를 위로
+  const names = Object.keys(groups).sort((a, b) => {
+    const ra = groups[a].filter(x => x.missing > 0).length;
+    const rb = groups[b].filter(x => x.missing > 0).length;
+    return rb - ra || a.localeCompare(b);
+  });
+
+  const doneAll = list.filter(s => s.missing === 0).length;
+  let html = `<div style="font-size:.88rem;margin-bottom:.6rem;">
+      전체 <b>${doneAll}</b> / <b>${list.length}</b>개소 완료
+      <span style="color:var(--muted);">· 담당자 ${names.length}명</span>
+    </div>`;
+
+  names.forEach((mgr, gi) => {
+    const g    = groups[mgr];
+    const done = g.filter(s => s.missing === 0).length;
+    const pct  = g.length ? Math.round(done / g.length * 100) : 0;
+    const left = g.length - done;
+    const bar  = pct === 100 ? 'var(--ok)' : (pct >= 50 ? 'var(--pri)' : 'var(--warn)');
+
+    html += `<div style="border:1.5px solid var(--border);border-radius:10px;margin-bottom:.5rem;overflow:hidden;">
+      <div onclick="toggleMgr(${gi})" style="padding:.65rem .8rem;cursor:pointer;background:#f8fafc;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-weight:700;font-size:.92rem;">${mgr}</span>
+          <span style="font-size:.82rem;">
+            <b style="color:${left ? 'var(--ng)' : 'var(--ok)'};">${done}</b>/${g.length}개소
+            <span id="mgrArrow_${gi}" style="color:var(--muted);margin-left:.3rem;">▼</span>
+          </span>
+        </div>
+        <div style="height:6px;background:#e2e8f0;border-radius:3px;margin-top:.45rem;overflow:hidden;">
+          <div style="width:${pct}%;height:100%;background:${bar};"></div>
+        </div>
+        <div style="font-size:.75rem;color:var(--muted);margin-top:.3rem;">
+          ${left ? `미완료 ${left}개소` : '모두 완료'}
+        </div>
+      </div>
+      <div id="mgrBody_${gi}" style="display:none;padding:.2rem .8rem .5rem;">`;
+
+    // 미완료를 위로
+    g.sort((a, b) => (b.missing - a.missing) || String(a.name).localeCompare(String(b.name)));
+    g.forEach(s => {
+      const ng = Number(s.이상항목수) || 0;
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:.45rem .1rem;border-bottom:1px solid #f1f5f9;font-size:.85rem;">
+          <div style="min-width:0;">
+            <div style="font-weight:600;">${s.name}</div>
+            <div style="font-size:.74rem;color:var(--muted);">
+              ${s.lastDate || '미점검'}${ng ? ` · <span style="color:var(--ng);">이상 ${ng}</span>` : ''}
+            </div>
+          </div>
+          <span class="badge" style="background:${s.missing > 0 ? '#fee2e2' : '#dcfce7'};color:${s.missing > 0 ? '#991b1b' : '#166534'};">
+            ${s.done}/${s.required}
+          </span>
+        </div>`;
+    });
+    html += `</div></div>`;
+  });
+
+  el.innerHTML = html;
+}
+
+// 담당자 아코디언 열고 닫기
+function toggleMgr(gi) {
+  const body  = document.getElementById('mgrBody_' + gi);
+  const arrow = document.getElementById('mgrArrow_' + gi);
+  if (!body) return;
+  const open = body.style.display === 'none';
+  body.style.display = open ? 'block' : 'none';
+  if (arrow) arrow.textContent = open ? '▲' : '▼';
+}
+
+function switchMTab(name) {
+  // 사진 탭 제거 후 기본정보 / 점검폼 2개만 남았습니다 (H-3)
+  ['info','form'].forEach(t => {
+    document.getElementById(`mt-${t}`)?.classList.toggle('active', t===name);
+  });
+  if (name === 'form' && !document.getElementById('formEl').innerHTML) {
+    buildForm(currentInspType);
+  }
+}
+/* ══════════════════════════════════════════════════════════
+   서버와 이야기하는 부분  (PWA 빌드에서 교체된 곳)
+
+   예전 : 구글이 만들어준 전용 통로 (google 스크립트 런).
+          앱이 구글 안에 있을 때만 쓸 수 있었습니다.
+   지금 : fetch — 보통의 인터넷 요청.
+          앱이 어디에 있든 쓸 수 있습니다.
+
+   세 가지가 중요합니다.
+     ① Content-Type 을 text/plain 으로 보냅니다
+        → 브라우저가 「단순 요청」으로 보고 그냥 통과시킵니다(CORS 우회).
+          application/json 으로 보내면 사전확인 요청이 먼저 날아가는데,
+          Apps Script 는 거기에 답할 수 없어 실패합니다.
+     ② 시간제한을 둡니다
+        → 신호가 약한 현장에서 영영 기다리는 일을 막습니다. 예전엔 없었습니다.
+     ③ 토큰을 자동으로 싣습니다
+        → 서버(버전 56)가 토큰 없는 요청을 거부합니다.
+   ══════════════════════════════════════════════════════════ */
+
+const API_URL    = 'https://script.google.com/macros/s/AKfycbykuZDhMNZ_IRjpJ6M712nNMPx4_uV_ky5o8ZOwlf5WhU38hRMI4zy47O5pFYlklKefWQ/exec';
+const TIMEOUT_MS = 15000;
+const TOKEN_KEY  = 'sky_token';
+
+/** 지금 쓸 수 있는 토큰을 찾습니다 (로그인 결과 → 저장된 값 → 주소의 ?token=) */
+function currentToken() {
+  if (S.user && S.user.token) return S.user.token;
+  try { const t = localStorage.getItem(TOKEN_KEY); if (t) return t; } catch (_) {}
+  return (typeof INJECTED_TOKEN !== 'undefined' && INJECTED_TOKEN) ? INJECTED_TOKEN : '';
+}
+
+/** 토큰이 죽었을 때 — 저장된 값을 지우고 로그인 화면으로 되돌립니다 */
+function forceRelogin(msg) {
+  try { localStorage.removeItem(TOKEN_KEY); } catch (_) {}
+  S.user = null;
+  const w = document.getElementById('loginWrap');
+  const m = document.getElementById('mainApp');
+  if (w) w.style.display = '';
+  if (m) m.style.display = 'none';
+  if (typeof toast === 'function') toast(msg || '다시 로그인해 주세요');
+}
+
+async function api(action, params = {}) {
+  const body = { action, ...params };
+  const tok  = currentToken();
+  if (tok && !body.token) body.token = tok;
+
+  const ac    = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+
+  try {
+    const res = await fetch(API_URL, {
+      method  : 'POST',
+      headers : { 'Content-Type': 'text/plain;charset=utf-8' },   /* ★ ① */
+      body    : JSON.stringify(body),
+      redirect: 'follow',                                          /* 구글이 한 번 넘깁니다 */
+      signal  : ac.signal                                          /* ★ ② */
+    });
+
+    const text = await res.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch (_) {
+      console.error(action, 'JSON 이 아닌 응답', text.slice(0, 200));
+      return null;
+    }
+
+    if (json && json.needLogin) { forceRelogin(json.error); return null; }
+    return json;
+
+  } catch (e) {
+    /* 시간 초과·연결 실패 — 예전과 같은 값(null)을 돌려줍니다.
+       기존 오프라인 처리가 그대로 동작하도록 하기 위함입니다. */
+    if (e.name === 'AbortError') console.warn(action, `응답 없음 (${TIMEOUT_MS / 1000}초 초과)`);
+    else                         console.warn(action, '통신 실패', e.message);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+/* localMock (더미데이터) — PWA 빌드에서 제외됨 */
+
+function toast(msg, ms=3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), ms);
+}
+</script>
+<script>
+/* ── 서비스 워커 등록 ───────────────────────────────────────
+   이걸 등록해야 앱이 휴대폰 안에 담기고, 통신 없이도 켜집니다.
+   ⚠️ https:// 또는 localhost 에서만 동작합니다.
+      파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
+   ───────────────────────────────────────────────────────── */
+(function () {
+  var BUILD = '20260816-1824';
+  console.log('앱 버전', BUILD);
+
+  if (!('serviceWorker' in navigator)) return;
+  var ok = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (!ok) { console.log('서비스 워커 생략 — https 가 아닙니다 (' + location.protocol + ')'); return; }
+
+  /* 이미 담겨 있는 상태에서 새 버전으로 갈리면 알려줍니다 */
+  var had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (had && typeof toast === 'function') toast('🔄 새 버전이 준비됐습니다. 앱을 다시 켜주세요');
+  });
+
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./sw.js')
+      .then(function (r) { console.log('서비스 워커 등록됨', r.scope); })
+      .catch(function (e) { console.warn('서비스 워커 등록 실패', e.message); });
+  });
+})();
+</script>
+</body>
+</html>
