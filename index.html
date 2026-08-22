@@ -302,19 +302,6 @@ input[type=number]{-moz-appearance:textfield;}
       <div class="card"><div class="card-title">월간 점검 현황</div>
         <div id="adminContent"></div>
       </div>
-
-      <!-- 이 기기 초기화 — 관리자만 보이는 곳에 둡니다.
-           현장 화면에 두면 서버 도착 여부를 확인할 수 없는 상태에서
-           안 올라간 점검을 지워버릴 수 있습니다. (2026-08-23) -->
-      <div class="card">
-        <div class="card-title">🧰 이 기기 초기화</div>
-        <div style="font-size:.82rem;color:var(--muted);line-height:1.6;margin-bottom:.6rem;">
-          이 휴대폰에 남아 있는 <b>전송 대기 · 작성 중 · 대기 사진</b>을 지웁니다.<br>
-          ⚠️ 되돌릴 수 없습니다. <b>서버에 이미 들어간 것이 맞는지</b>
-          점검데이터 시트에서 먼저 확인하세요.
-        </div>
-        <div id="deviceResetBox">불러오는 중…</div>
-      </div>
     </div>
   </div>
 </div>
@@ -3724,7 +3711,7 @@ function switchTab(name) {
     el.classList.toggle('active', ['list','mine','admin'][i]===name);
   });
   if (name === 'form') buildForm(currentInspType);
-  if (name === 'admin') { loadCommonNotice(); loadAdminSummary(); renderDeviceReset(); }
+  if (name === 'admin') { loadCommonNotice(); loadAdminSummary(); }
   if (name === 'mine') loadMineSummary();
 }
 
@@ -3791,6 +3778,7 @@ function fmtDay(v) {
 async function renderDeviceStatus() {
   const drafts  = await listStore(IDB_DRAFT);
   const pending = await listStore(IDB_SUBMIT);
+  const photos  = await listStore(IDB_STORE);
   const info    = await getStorageInfo();
 
   let html = '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;'
@@ -3842,6 +3830,23 @@ async function renderDeviceStatus() {
     }
   }
 
+  /* ── 🧰 이 기기 초기화 — 관리자에게만 보입니다 ─────────────
+     점검원 화면에는 안 나옵니다. 현장에서는 서버에 들어갔는지
+     확인할 방법이 없어, 아직 안 올라간 점검을 지워버릴 수 있습니다. */
+  if (S.user && S.user.role === '관리자' && (pending.length || drafts.length || photos.length)) {
+    html += '<details style="margin-top:.6rem;border-top:1px solid var(--border);padding-top:.5rem;">'
+          + '<summary style="cursor:pointer;font-size:.82rem;color:var(--ng);font-weight:700;">'
+          + '🧰 이 기기 초기화 (관리자)</summary>'
+          + '<div style="font-size:.78rem;color:var(--muted);line-height:1.6;margin:.4rem 0;">'
+          + `전송 대기 ${pending.length}건 · 작성 중 ${drafts.length}건 · 대기 사진 ${photos.length}건 을 지웁니다.<br>`
+          + '⚠️ 되돌릴 수 없습니다. <b>서버에 이미 들어간 것이 맞는지</b> 점검데이터 시트에서 먼저 확인하세요.'
+          + '</div>'
+          + '<button type="button" class="btn btn-sm" style="width:100%;'
+          + 'background:#fff;color:#b91c1c;border:1.5px solid #fecaca;font-weight:700;"'
+          + ' onclick="resetDeviceData()">🗑 전부 지우기</button>'
+          + '</details>';
+  }
+
   return html + '</div>';
 }
 
@@ -3888,36 +3893,6 @@ async function flushPendingNow() {
      또는 시험하느라 쌓인 작성 중 기록을 정리할 때.
    ══════════════════════════════════════════════════════════ */
 
-/** 무엇이 몇 건 있는지 세어 화면에 보여줍니다 */
-async function renderDeviceReset() {
-  const el = document.getElementById('deviceResetBox');
-  if (!el) return;
-
-  const pending = await listStore(IDB_SUBMIT);
-  const drafts  = await listStore(IDB_DRAFT);
-  const photos  = await listStore(IDB_STORE);
-
-  const 줄 = (이름, 목록, 그리기) => 목록.length
-    ? `<div style="margin-top:.4rem;"><b>${이름} ${목록.length}건</b>`
-      + `<div style="font-size:.8rem;color:var(--muted);line-height:1.6;margin-top:.15rem;">`
-      + 목록.slice(0, 12).map(그리기).join('<br>')
-      + (목록.length > 12 ? `<br>… 외 ${목록.length - 12}건` : '')
-      + '</div></div>'
-    : '';
-
-  const 내용 =
-      줄('⏳ 전송 대기', pending, p => '· ' + esc(p.payload?.data?.설비명칭 || '(이름없음)') + ' ' + fmtWhen(p.createdAt))
-    + 줄('📝 작성 중',  drafts,  d => '· ' + esc(d.설비명칭 || d.no) + ' ' + fmtWhen(d.savedAt))
-    + 줄('📷 대기 사진', photos, () => '');
-
-  el.innerHTML = 내용
-    ? 내용
-      + '<button type="button" class="btn btn-sm" style="width:100%;margin-top:.7rem;'
-      + 'background:#fff;color:#b91c1c;border:1.5px solid #fecaca;font-weight:700;"'
-      + ' onclick="resetDeviceData()">🗑 이 기기의 위 기록 전부 지우기</button>'
-    : '<div style="color:var(--ok);">✅ 기기에 남은 기록이 없습니다.</div>';
-}
-
 /** 실제로 지웁니다 — 되돌릴 수 없습니다 */
 async function resetDeviceData() {
   const pending = await listStore(IDB_SUBMIT);
@@ -3953,8 +3928,7 @@ async function resetDeviceData() {
     toast('지우지 못했습니다: ' + (e.message || e), 5000);
   }
   await checkQueue();
-  renderDeviceReset();
-  loadMineSummary();
+  loadMineSummary();     // 「이 기기 상태」를 다시 그립니다
 }
 
 async function loadAdminSummary() {
@@ -4163,7 +4137,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '20260823-0822';
+  var BUILD = '20260823-0836';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
