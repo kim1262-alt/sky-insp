@@ -302,6 +302,19 @@ input[type=number]{-moz-appearance:textfield;}
       <div class="card"><div class="card-title">월간 점검 현황</div>
         <div id="adminContent"></div>
       </div>
+
+      <!-- 이 기기 초기화 — 관리자만 보이는 곳에 둡니다.
+           현장 화면에 두면 서버 도착 여부를 확인할 수 없는 상태에서
+           안 올라간 점검을 지워버릴 수 있습니다. (2026-08-23) -->
+      <div class="card">
+        <div class="card-title">🧰 이 기기 초기화</div>
+        <div style="font-size:.82rem;color:var(--muted);line-height:1.6;margin-bottom:.6rem;">
+          이 휴대폰에 남아 있는 <b>전송 대기 · 작성 중 · 대기 사진</b>을 지웁니다.<br>
+          ⚠️ 되돌릴 수 없습니다. <b>서버에 이미 들어간 것이 맞는지</b>
+          점검데이터 시트에서 먼저 확인하세요.
+        </div>
+        <div id="deviceResetBox">불러오는 중…</div>
+      </div>
     </div>
   </div>
 </div>
@@ -3711,7 +3724,7 @@ function switchTab(name) {
     el.classList.toggle('active', ['list','mine','admin'][i]===name);
   });
   if (name === 'form') buildForm(currentInspType);
-  if (name === 'admin') { loadCommonNotice(); loadAdminSummary(); }
+  if (name === 'admin') { loadCommonNotice(); loadAdminSummary(); renderDeviceReset(); }
   if (name === 'mine') loadMineSummary();
 }
 
@@ -3794,9 +3807,10 @@ async function renderDeviceStatus() {
           + (S.lastFlushError
               ? `<div style="font-size:.78rem;color:var(--ng);margin-top:.35rem;">✕ 마지막 시도 : ${esc(S.lastFlushError)}</div>`
               : '')
+          /* ⚠️ 여기에 「비우기」 버튼을 두지 마세요 (2026-08-23 결정).
+                현장에서는 서버에 들어갔는지 확인할 방법이 없습니다.
+                안 올라간 점검을 지워버릴 수 있어, 관리자 화면(현황 탭)으로 옮겼습니다. */
           + '<button type="button" class="btn btn-pri btn-sm" style="width:100%;margin-top:.5rem;" onclick="flushPendingNow()">📤 지금 전송</button>'
-          + '<button type="button" class="btn btn-sm" style="width:100%;margin-top:.35rem;background:#fff;color:#b91c1c;border:1.5px solid #fecaca;"'
-          + ' onclick="clearPendingQueue()">🗑 대기함 비우기</button>'
           + '</div>';
   }
 
@@ -3862,49 +3876,84 @@ async function flushPendingNow() {
   loadMineSummary();   // 목록 갱신
 }
 
-/**
- * 🗑 대기함 비우기 — 되돌릴 수 없습니다.
- *
- *  언제 쓰나 —
- *    같은 점검이 서버에 이미 들어갔는데 대기함에서 안 지워질 때.
- *    (2026-08-23 시간초과 문제로 실제 발생)
- *
- *  ⚠️ 서버에 아직 안 간 점검이 있으면 그대로 사라집니다.
- *     그래서 무엇이 지워지는지 하나하나 보여주고 두 번 묻습니다.
- */
-async function clearPendingQueue() {
+/* ══════════════════════════════════════════════════════════
+   🧰 이 기기 초기화 — 관리자만 (현황 탭)
+
+   ⚠️ 현장 화면(내 점검)에는 절대 두지 않습니다.
+      현장에서는 서버에 들어갔는지 확인할 방법이 없어서,
+      아직 안 올라간 점검을 지워버릴 수 있습니다. (2026-08-23 결정)
+
+   언제 쓰나 —
+     서버에는 이미 들어갔는데 대기함에서 안 지워질 때,
+     또는 시험하느라 쌓인 작성 중 기록을 정리할 때.
+   ══════════════════════════════════════════════════════════ */
+
+/** 무엇이 몇 건 있는지 세어 화면에 보여줍니다 */
+async function renderDeviceReset() {
+  const el = document.getElementById('deviceResetBox');
+  if (!el) return;
+
   const pending = await listStore(IDB_SUBMIT);
-  if (!pending.length) return toast('대기함이 비어 있습니다.');
+  const drafts  = await listStore(IDB_DRAFT);
+  const photos  = await listStore(IDB_STORE);
 
-  const 목록 = pending.map(p =>
-    '  · ' + (p.payload?.data?.설비명칭 || '(이름없음)') + '  ' + fmtWhen(p.createdAt)
-  ).join('\n');
+  const 줄 = (이름, 목록, 그리기) => 목록.length
+    ? `<div style="margin-top:.4rem;"><b>${이름} ${목록.length}건</b>`
+      + `<div style="font-size:.8rem;color:var(--muted);line-height:1.6;margin-top:.15rem;">`
+      + 목록.slice(0, 12).map(그리기).join('<br>')
+      + (목록.length > 12 ? `<br>… 외 ${목록.length - 12}건` : '')
+      + '</div></div>'
+    : '';
 
-  if (!confirm('대기함을 비울까요?\n\n' + 목록 +
+  const 내용 =
+      줄('⏳ 전송 대기', pending, p => '· ' + esc(p.payload?.data?.설비명칭 || '(이름없음)') + ' ' + fmtWhen(p.createdAt))
+    + 줄('📝 작성 중',  drafts,  d => '· ' + esc(d.설비명칭 || d.no) + ' ' + fmtWhen(d.savedAt))
+    + 줄('📷 대기 사진', photos, () => '');
+
+  el.innerHTML = 내용
+    ? 내용
+      + '<button type="button" class="btn btn-sm" style="width:100%;margin-top:.7rem;'
+      + 'background:#fff;color:#b91c1c;border:1.5px solid #fecaca;font-weight:700;"'
+      + ' onclick="resetDeviceData()">🗑 이 기기의 위 기록 전부 지우기</button>'
+    : '<div style="color:var(--ok);">✅ 기기에 남은 기록이 없습니다.</div>';
+}
+
+/** 실제로 지웁니다 — 되돌릴 수 없습니다 */
+async function resetDeviceData() {
+  const pending = await listStore(IDB_SUBMIT);
+  const drafts  = await listStore(IDB_DRAFT);
+
+  const 목록 = []
+    .concat(pending.map(p => '  [전송대기] ' + (p.payload?.data?.설비명칭 || '(이름없음)') + '  ' + fmtWhen(p.createdAt)))
+    .concat(drafts.map(d => '  [작성중]  ' + (d.설비명칭 || d.no) + '  ' + fmtWhen(d.savedAt)))
+    .join('\n');
+
+  if (!목록) return toast('지울 것이 없습니다.');
+
+  if (!confirm('이 기기에 남은 기록을 전부 지웁니다.\n\n' + 목록 +
       '\n\n★ 되돌릴 수 없습니다.\n' +
-      '서버에 아직 안 올라간 점검이 있으면 그대로 사라집니다.\n' +
-      '[내 점검] 이나 구글 시트에서 이미 들어간 것이 맞는지 확인하셨나요?')) return;
+      '전송 대기 중인 점검이 서버에 이미 들어갔는지\n' +
+      '구글 시트(점검데이터)에서 확인하셨나요?')) return;
 
   if (!confirm('정말 지웁니다. 계속할까요?')) return;
 
+  const 비우기 = (store) => withIdb(db => new Promise(res => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).clear();
+    tx.oncomplete = res; tx.onerror = res;
+  }));
+
   try {
-    await withIdb(db => new Promise(res => {
-      const tx = db.transaction(IDB_SUBMIT, 'readwrite');
-      tx.objectStore(IDB_SUBMIT).clear();
-      tx.oncomplete = res; tx.onerror = res;
-    }));
-    /* 사진 대기함도 같이 비웁니다 — 제출과 짝이라 따로 두면 남습니다 */
-    await withIdb(db => new Promise(res => {
-      const tx = db.transaction(IDB_STORE, 'readwrite');
-      tx.objectStore(IDB_STORE).clear();
-      tx.oncomplete = res; tx.onerror = res;
-    }));
+    await 비우기(IDB_SUBMIT);   // 전송 대기
+    await 비우기(IDB_DRAFT);    // 작성 중
+    await 비우기(IDB_STORE);    // 대기 사진
     S.lastFlushError = '';
-    toast('🗑 대기함을 비웠습니다.');
+    toast('🗑 기기 기록을 전부 지웠습니다.');
   } catch (e) {
-    toast('비우지 못했습니다: ' + (e.message || e), 5000);
+    toast('지우지 못했습니다: ' + (e.message || e), 5000);
   }
   await checkQueue();
+  renderDeviceReset();
   loadMineSummary();
 }
 
@@ -4114,7 +4163,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '20260823-0809';
+  var BUILD = '20260823-0822';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
