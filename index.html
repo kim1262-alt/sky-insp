@@ -452,6 +452,12 @@ const DRAFT_DEBOUNCE = 2500;
 async function saveDraftNow() {
   if (!idb || !S.currentSite) return;
   if (S.editing) return;                                  // 수정 모드는 대상 아님
+  /* ⚠️ 제출을 끝낸 뒤에는 저장하지 않습니다 (2026-08-23)
+        자동 임시저장은 2.5초 디바운스로 돕니다.
+        제출 직전에 값을 고쳤다면, 제출이 끝나고 초안을 지운 뒤에
+        그 타이머가 뒤늦게 실행되어 초안이 되살아났습니다.
+        → 「전송 대기」와 「작성 중」에 같은 건이 동시에 남았습니다. */
+  if (S.draftOff) return;
   const formEl = document.getElementById('formEl');
   if (!formEl || !formEl.innerHTML) return;               // 폼이 안 열렸으면 저장할 것 없음
   if (typeof collectFormData !== 'function') return;
@@ -915,6 +921,7 @@ async function openSite(no) {
   S.photoMap = {};
   S.extraTypesShown = [];
   S.editing = null;              // 수정 모드 해제
+  S.draftOff = false;            // 자동 임시저장 다시 켜기 (제출 뒤 꺼둔 것)
   S.siteInspections = [];        // 이번 달 제출 목록 (회차 선택용)
   S.pendingDraft = null;         // 작성 중이던 초안
   S.emergencyMode = false;       // 긴급출동 모드 해제
@@ -1663,9 +1670,23 @@ function renderInvKwhSection(equip) {
 function renderTrTempSection(equip, isSub) {
   const el = document.getElementById('trTempSection');
   if (!el) return;
-  if (!isSub || !equip.변압기수량) { el.innerHTML = ''; return; }
-  const cnt = equip.변압기수량;
-  let html = `<div class="sec-title">🌡 변압기 온도 <span style="color:var(--pri);font-weight:700;">${cnt}대</span></div>`;
+
+  /* 고압·특고 수전이면 변압기가 반드시 있습니다.
+     ⚠️ 예전에는 설비관리대장의 「변압기수량」이 비어 있으면 칸 자체가 안 나왔습니다.
+        일반고압 수용가는 그 값이 안 채워진 곳이 많아 온도를 적을 데가 없었습니다.
+        → 고압이면 최소 1대로 보고 칸을 내주되, 대장을 채우라고 알려줍니다. */
+  const 구분 = String(S.currentSite?.설비구분 || equip.설비구분 || '');
+  const 고압 = 구분.indexOf('고압') >= 0 || 구분.indexOf('특고') >= 0;
+
+  let cnt = Number(equip.변압기수량) || 0;
+  let 추정 = false;
+  if (!cnt && 고압) { cnt = 1; 추정 = true; }
+
+  if (!cnt) { el.innerHTML = ''; return; }
+
+  let html = `<div class="sec-title">🌡 변압기 온도 <span style="color:var(--pri);font-weight:700;">${cnt}대</span>`
+           + (추정 ? ` <span style="font-weight:400;color:var(--warn);font-size:.78rem;">· 설비관리대장에 수량이 없어 1대로 표시합니다</span>` : '')
+           + `</div>`;
   if (cnt === 1) {
     html += `<div class="fg"><label>변압기 온도(°C)</label>
       <input type="text" id="tr_temp_1" inputmode="decimal" placeholder="25.0" oninput="handleSmartInput(this)">
@@ -3473,6 +3494,10 @@ async function submitForm() {
     }
 
     // 2) 저장이 확인된 뒤에만 작성 중 초안을 정리합니다
+    //    ⚠️ 대기 중인 자동 임시저장 타이머를 먼저 끕니다.
+    //       안 그러면 지운 직후에 그 타이머가 돌아 초안이 되살아납니다.
+    S.draftOff = true;
+    if (typeof _draftTimer !== 'undefined' && _draftTimer) clearTimeout(_draftTimer);
     await deleteDraft(d.no);
 
     // 3) 화면은 즉시 놓아줍니다 — 다음 점검을 바로 시작할 수 있어야 합니다.
@@ -4176,7 +4201,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '20260823-1254';
+  var BUILD = '20260823-1310';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
