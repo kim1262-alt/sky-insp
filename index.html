@@ -1536,6 +1536,86 @@ async function resolveFault(faultId, status) {
   const faults = await fetchPendingFaults(S.currentSite?.no);
   renderPendingBanner(faults || []);
 }
+/* ══════════════════════════════════════════════════════════════
+   「기본」 점검구분 — 화면 맨 위 공통 입력칸
+   ──────────────────────────────────────────────────────────────
+   점검항목관리 시트의 점검구분 「기본」 줄을 읽어서 그립니다.
+
+   ★ 시트가 정하는 것   이 설비에 이 칸을 보일지 · 이름 · 단위 · 순서
+   ★ 코드가 정하는 것   칸의 생김새(자동조회 버튼 등)와 실제 대수 판단
+
+   ⚠️ 칸의 id (f_weather · f_temp · f_prev_power · f_curr_power ·
+      invKwhSection · trTempSection) 는 절대 바꾸지 않습니다.
+      이 이름으로 저장·자동채움 코드가 값을 찾아갑니다.
+   ══════════════════════════════════════════════════════════════ */
+function escT_(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+// 라벨 옆 작은 회색 도움말 (비고 열)
+function 힌트_(it) {
+  var t = String(it && it.비고 || '').trim();
+  if (!t) return '';
+  return ' <span style="font-weight:400;color:var(--muted);font-size:.75rem;">' + escT_(t) + '</span>';
+}
+function 라벨_(it, 기본이름) {
+  var n = String(it && it.항목명 || '').trim() || 기본이름;
+  var u = String(it && it.단위 || '').trim();
+  return escT_(n) + (u ? '(' + escT_(u) + ')' : '');
+}
+
+var BASIC_RENDER = {
+  '날씨': { 폭:'half', html: function(it) {
+    return '<div class="fg">'
+      + '<label>' + 라벨_(it,'날씨')
+      +   ' <button type="button" class="btn btn-out btn-sm" onclick="autoWeather()" style="margin-left:.4rem;">&#127788; 자동조회</button>'
+      +   '<span id="weatherHint" style="font-weight:400;color:var(--warn);font-size:.75rem;display:none;">&#128244; 직접 적어주세요</span>'
+      + '</label>'
+      + '<input type="text" id="f_weather" placeholder="맑음">'
+      + '</div>';
+  }},
+  '기온': { 폭:'half', html: function(it) {
+    return '<div class="fg"><label>' + 라벨_(it,'기온') + '</label>'
+      + '<input type="text" id="f_temp" inputmode="decimal" placeholder="25.0" oninput="handleSmartInput(this)"></div>';
+  }},
+  '전월송전전력': { 폭:'half', html: function(it) {
+    return '<div class="fg"><label>' + 라벨_(it,'전월 송전전력') + 힌트_(it) + '</label>'
+      + '<input type="text" id="f_prev_power" inputmode="decimal" placeholder="kWh" oninput="handleSmartInput(this)">'
+      + '<div id="prevPowerHint" style="font-size:.76rem;margin-top:.25rem;min-height:1rem;"></div>'
+      + '</div>';
+  }},
+  '현재송전전력': { 폭:'half', html: function(it) {
+    return '<div class="fg"><label>' + 라벨_(it,'현재 송전전력') + 힌트_(it) + '</label>'
+      + '<input type="text" id="f_curr_power" inputmode="decimal" placeholder="kWh" oninput="handleSmartInput(this)"></div>';
+  }},
+  // 아래 둘은 대수를 알아야 그릴 수 있어서 빈 자리만 만들어 둡니다.
+  // 실제 내용은 renderInvKwhSection / renderTrTempSection 이 채웁니다.
+  '인버터발전량': { 폭:'full', html: function() { return '<div id="invKwhSection"></div>'; } },
+  'tr_temp':     { 폭:'full', html: function() { return '<div id="trTempSection"></div>'; } }
+};
+
+function 기본칸조립_(items) {
+  var out = '', buf = [];
+  function flush() {
+    if (!buf.length) return;
+    // 한 줄에 두 칸씩. 홀수로 남으면 빈 칸을 채워 폭을 맞춥니다.
+    out += '<div class="row2">' + buf.join('') + (buf.length === 1 ? '<div class="fg"></div>' : '') + '</div>';
+    buf = [];
+  }
+  var 정렬 = items.slice().sort(function(a, b) {
+    return (Number(a.순서) || 0) - (Number(b.순서) || 0);
+  });
+  정렬.forEach(function(it) {
+    var def = BASIC_RENDER[String(it.항목ID || '').trim()];
+    if (!def) return;   // 코드가 모르는 항목ID는 조용히 건너뜁니다 (오타 방어)
+    var h = def.html(it);
+    if (def.폭 === 'full') { flush(); out += h; }
+    else { buf.push(h); if (buf.length === 2) flush(); }
+  });
+  flush();
+  return out;
+}
+
 async function buildForm(inspType) {
   const site   = S.currentSite;
   // 설비정보 로딩이 끝나지 않았으면 대기 (측정 채널 표시에 필요)
@@ -1549,10 +1629,14 @@ async function buildForm(inspType) {
 
   // ── 이 발전소에서 사용 가능한 점검구분 목록 미리 조회 (아코디언 표시 여부 결정) ──
   //   전체 항목을 inspType 필터 없이 조회해서 존재하는 점검구분 수집
+  let 기본항목 = [];
   try {
     const allItems = await fetchCheckItems(site, '');
     const avail = {};
     (allItems || []).forEach(it => { avail[it.점검구분] = true; });
+    // 「기본」은 아코디언이 아니라 맨 위에 바로 그립니다 → 목록에서 뺍니다
+    기본항목 = (allItems || []).filter(it => String(it.점검구분||'').trim() === '기본');
+    delete avail['기본'];
     // 월차점검/긴급출동/열화상촬영은 항상 표시 (하드코딩 폴백 존재)
     avail['월차점검'] = true; avail['긴급출동'] = true; avail['열화상촬영'] = true;
     // 측정은 채널 정보 또는 시트 항목이 있으면 표시
@@ -1577,8 +1661,20 @@ async function buildForm(inspType) {
      ───────────────────────────────────────────────────────── */
   const isGeneral = (site.설비구분 || '').includes('일반');
 
+  /* ── 2026-08-23 시트 기반으로 전환 ────────────────────────────
+     점검항목관리에 점검구분 「기본」 줄이 있으면 그 줄이 화면을 정합니다.
+     한 줄도 없으면 예전 방식(설비구분으로 판단)이 그대로 돕니다.
+       → 두 방식을 나란히 두고 같은 화면이 나오는지 비교하는 단계입니다.
+
+     ★ 칸의 이름(f_weather 등)은 예전 그대로 씁니다.
+        그래서 저장·보고서 쪽은 한 줄도 안 건드려도 됩니다.
+     ──────────────────────────────────────────────────────────── */
+  const 시트기반 = 기본항목.length > 0;
+
   var envHtml = '';
-  if (!isGeneral) {
+  if (시트기반) {
+    envHtml = 기본칸조립_(기본항목);
+  } else if (!isGeneral) {
     envHtml =
       '<div class="row2">'
     +   '<div class="fg">'
@@ -1616,9 +1712,7 @@ async function buildForm(inspType) {
     <select id="f_seq"></select>
   </div>
   ${envHtml}
-  <div id="invKwhSection"></div>
-
-<div id="trTempSection"></div>
+  ${시트기반 ? '' : '<div id="invKwhSection"></div><div id="trTempSection"></div>'}
 
 <div class="fg" style="margin-bottom:.3rem;">
     <label>점검구분 * <span style="font-weight:400;color:var(--muted);font-size:.78rem;">항목을 탭하면 펼쳐집니다 · 복수 선택 가능</span></label>
@@ -4201,7 +4295,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '20260823-1310';
+  var BUILD = '20260823-1424';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
