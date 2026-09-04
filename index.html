@@ -860,7 +860,7 @@ function renderSiteFilterBar() {
 
 async function loadSites() {
   // 서버 응답 형태가 바뀌면 버전을 올려 옛 캐시를 버립니다 (위도·경도·전달사항 추가)
-  const cacheKey = 'siteCache_v3_' + (S.user?.name || '');
+  const cacheKey = 'siteCache_v4_' + (S.user?.name || '');
 
   // 1) 캐시 먼저 즉시 표시 (재방문 시 체감속도 향상)
   try {
@@ -876,6 +876,9 @@ async function loadSites() {
   // 2) 서버 갱신
   const r = await api('getSiteList', { staffName: S.user?.name });
   if (!r) return;
+  S.serverVer = r.ver || '';       // 배포본 판 번호 — 화면에 띄웁니다
+  try { localStorage.setItem('serverVer', S.serverVer); } catch (_) {}
+  renderPrepInfo();
   S.siteOwn = r.own || [];
   S.siteAll = r.all || [];
   if (!S.siteOwn.length && !S.siteAll.length) return;
@@ -2080,23 +2083,32 @@ async function fetchPendingFaults(no) {
    ───────────────────────────────────────────────────────── */
 const PREP_KEY = 'offlinePrepAt';
 
+/* 서버 판 번호 — 「배포했나?」를 눈으로 알기 위한 표시입니다.
+   앱에 뜬 값이 Code.js 의 CODE_VER 과 다르면 재배포를 안 한 것입니다. */
+function serverVerText_() {
+  let v = '';
+  try { v = S.serverVer || localStorage.getItem('serverVer') || ''; } catch (_) {}
+  return v ? '  ·  서버 ' + v : '';
+}
+
 function renderPrepInfo() {
   const el = document.getElementById('prepInfo');
   if (!el) return;
   let at = null;
   try { at = localStorage.getItem(PREP_KEY); } catch (_) {}
-  if (!at) { el.textContent = '아직 받아둔 적이 없습니다'; return; }
+  if (!at) { el.textContent = '아직 받아둔 적이 없습니다' + serverVerText_(); return; }
 
   /* ⚠️ 저장은 세계표준시(ISO)로 하고, 표시는 반드시 우리 시각으로 바꿉니다.
         toISOString() 을 그대로 잘라 쓰면 한국 시각보다 9시간 이르게 나옵니다. */
   const d = new Date(at);
-  if (isNaN(d)) { el.textContent = '마지막 준비 (시각 불명)'; return; }
+  if (isNaN(d)) { el.textContent = '마지막 준비 (시각 불명)' + serverVerText_(); return; }
   const p = n => String(n).padStart(2, '0');
   const today = new Date();
   const sameDay = d.toDateString() === today.toDateString();
   el.textContent = '마지막 준비 '
     + (sameDay ? '오늘 ' : `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} `)
-    + `${p(d.getHours())}:${p(d.getMinutes())}`;
+    + `${p(d.getHours())}:${p(d.getMinutes())}`
+    + serverVerText_();
 }
 
 /** 여러 개를 한꺼번에 부르되 동시 개수를 제한합니다 (서버 부담·실패율 관리) */
@@ -2382,6 +2394,17 @@ function renderInspSection(inspTypeOrTypes, site, equip, isLow, isSub, sections)
       }
     }
   });
+
+  // ── 사진 카운트·뱃지 복원 (2026-09-04 · R-3) ──
+  //  재렌더링으로 버튼이 새로 그려지면 「📷 N」 표시와 충족(done) 상태가
+  //  사라집니다. S.photoMap 기준으로 전부 다시 칠합니다.
+  if (S.photoMap && typeof updatePhotoCount === 'function') {
+    const needBy = {};
+    (S.checkItems || []).forEach(it => { needBy['item_' + it.항목ID] = Number(it.최소사진수) || 0; });
+    Object.keys(S.photoMap).forEach(itemId => {
+      if ((S.photoMap[itemId] || []).length > 0) updatePhotoCount(itemId, needBy[itemId] || 0);
+    });
+  }
 }
 function toggleInspAcc(t) {
   const bodyEl  = document.getElementById(`accBody_${t}`);
@@ -2491,7 +2514,7 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
         } else if (t === '3상') {
           // 3상 측정 — A/B/C상을 "/" 구분 한 줄 입력, [+ 추가]로 호기 확장
           html += `<div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
-            <span style="font-size:.83rem;font-weight:700;color:var(--muted);">${item.항목명}${unit} <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
+            <span style="font-size:.83rem;font-weight:700;color:var(--muted);">${item.항목명}${unit} <span style="font-weight:400;font-size:.75rem;">${item.비고 || 'A/B/C상 · / 구분'}</span></span>
             <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);"
               onclick="addPhaseSet('${item.항목ID}','${(item.항목명||'').replace(/'/g,'')}','${item.단위||''}')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('${item.항목ID}','${(item.항목명||'').replace(/'/g,'')}')">− 제거</button>
           </div>
@@ -2997,8 +3020,12 @@ function renderOXRow(item) {
   const need  = Number(item.최소사진수) || 0;  // 점검항목관리 N열
 
   // 사진 버튼 — 최소 매수가 정해져 있으면 여러 장 선택, 아니면 1장
+  // 재렌더링(아코디언 토글) 시에도 이미 찍은 매수를 되살려 표시합니다 (2026-09-04 · R-3)
+  //  ⚠️ 예전에는 「📷」로만 새로 그려서, 접속함에 찍은 사진 개수가 사라지고
+  //     그 뒤에 다른 항목(인버터)에 찍으면 그 항목만 카운트가 살아나
+  //     "엉뚱한 항목에 표시된다"로 보이는 원인이었습니다.
   const camBtn = item.사진허용
-    ? `<button class="cam-btn" id="cam_item_${id}" type="button" onclick="takeItemPhotoMulti('item_${id}','${nameA}',${need || 1})">📷</button>`
+    ? `<button class="cam-btn" id="cam_item_${id}" type="button" onclick="takeItemPhotoMulti('item_${id}','${nameA}',${need || 1})">📷${getCamBadge('item_' + id) ? `<span class="cam-count">${getCamBadge('item_' + id)}</span>` : ''}</button>`
     : '';
 
   // 필수 사진 매수 배지
@@ -3087,8 +3114,13 @@ function renderDefaultCheckItems(inspType) {
       //    오프라인에서 점검항목을 못 받아오면 이 폴백이 실제로 실행됩니다.
       const nameA = escAttr(item.name);
       const need  = item.minPhoto || 0;
+      const camCnt = getCamBadge('item_' + item.id);
       const camBtn = `<button type="button" class="cam-btn" id="cam_item_${item.id}"
-            onclick="takeItemPhotoMulti('item_${item.id}','${nameA}',${need || 1})">📷</button>`;
+            onclick="takeItemPhotoMulti('item_${item.id}','${nameA}',${need || 1})">📷${camCnt ? `<span class="cam-count">${camCnt}</span>` : ''}</button>`;
+      // OX2_NA(접속반 등)는 설비가 없는 발전소용 「/」 버튼이 있어야 합니다.
+      // 시트 기반 renderOXRow에는 H-13으로 넣었는데 이 폴백에는 빠져 있었습니다 (2026-09-04 · R-4)
+      const naBtnF = isNA
+        ? `<button type="button" class="ox-btn na" onclick="setOX('item_${item.id}','/')" title="해당 설비 없음">/</button>` : '';
 
       html += `<div class="ox-row" id="row_item_${item.id}">
         <div class="ox-name">
@@ -3098,7 +3130,7 @@ function renderDefaultCheckItems(inspType) {
           <div class="ox-grp">
             <button type="button" class="ox-btn o" onclick="setOX('item_${item.id}','O')">O</button>
             <button type="button" class="ox-btn x" onclick="setOX('item_${item.id}','X')">X</button>
-            
+            ${naBtnF}
           </div>
           ${camBtn}
         </div>
@@ -3512,6 +3544,20 @@ function collectFormData() {
     if (v)   items[`inv_v_${i}`]   = v;
     if (a)   items[`inv_a_${i}`]   = a;
   }
+  // 폴백 화면의 개방전압(voc_i)·절연저항(ins_i) — id에 item_ 접두사가 없어
+  // 위 어느 수집 경로에도 안 걸리던 것을 여기서 직접 담습니다 (2026-09-04 · R-2)
+  //  · 명판별: voc_0, voc_1 … → M_VOC_1, M_VOC_2 … (시트 항목ID와 같은 이름)
+  //  · 채널 없음 폴백: voc_0/ins_0 한 쌍 → M_VOC_1/M_INS_1
+  for (let i = 0; i < 30; i++) {
+    const vocEl = document.getElementById(`voc_${i}`);
+    const insEl = document.getElementById(`ins_${i}`);
+    if (!vocEl && !insEl) { if (i > 0) break; else continue; }
+    const vv = vocEl ? String(vocEl.value || '').trim() : '';
+    const iv = insEl ? String(insEl.value || '').trim() : '';
+    if (vv && !items[`M_VOC_${i + 1}`]) items[`M_VOC_${i + 1}`] = vv;
+    if (iv && !items[`M_INS_${i + 1}`]) items[`M_INS_${i + 1}`] = iv;
+  }
+
   // 변압기 온도: 1대 = tr_temp_1, 2대 이상 = tr_temp_multi ("/" 구분)
   const trMulti = document.getElementById('tr_temp_multi')?.value || '';
   if (trMulti) {
@@ -3756,6 +3802,25 @@ async function saveInspectionToOfflineQueue(d) {
       });
     });
   }
+
+  /* ★ 추가사진(썸네일)도 함께 담습니다 (2026-09-04 · R-1)
+     previewSitePhotos()는 사진을 화면의 .photo-thumb dataset 에만 두는데,
+     예전 리팩토링(H-11/H-12) 때 이걸 수집하는 경로가 끊겨
+     추가사진이 화면에만 보이고 서버로는 전혀 안 올라가고 있었습니다. */
+  document.querySelectorAll('.photo-thumb').forEach(div => {
+    const b64 = div.dataset && div.dataset.base64;
+    if (!b64) return;
+    photos.push({
+      base64: b64,
+      filename: div.dataset.filename || `photo_${Date.now()}.jpg`,
+      no: siteNo,
+      설비명칭: siteName,
+      itemId: div.dataset.type === 'site' ? 'site_photos' : (div.dataset.itemId || 'extra'),
+      itemName: '추가사진',
+      uploader: uploaderName,
+      photoType: isThermal ? '열화상촬영' : ''
+    });
+  });
 
   // 중복 저장 방지: 해당 발전소(d.no)의 기존 대기 기록 청소 후 최신 1건 유지
   try {
@@ -4295,7 +4360,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '20260823-1424';
+  var BUILD = '20260904-1030';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
