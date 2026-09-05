@@ -9,11 +9,11 @@
      앱   : 화면 표시
 
    ⚠️ 이 파일은 【재료】입니다. 빌드하면 배포용/sw.js 로 복사되면서
-      아래 20260904-1030 자리에 빌드 시각이 찍힙니다.
+      아래 11eddbe2 자리에 빌드 시각이 찍힙니다.
       배포용/sw.js 를 직접 고치지 마세요.
    ════════════════════════════════════════════════════════════ */
 
-const VERSION = '20260904-1030';
+const VERSION = '11eddbe2';
 const CACHE   = 'sky-insp-' + VERSION;
 
 /* 휴대폰에 미리 담아둘 파일들 — 이것만 있으면 앱이 켜집니다 */
@@ -28,14 +28,31 @@ const SHELL = [
 ];
 
 /* ── 설치 : 파일을 담아둡니다 ──────────────────────────────── */
+/* 앱이 켜지는 데 반드시 필요한 것 — 하나라도 못 받으면 설치를 실패시킵니다 */
+const SHELL_REQUIRED = ['./', './index.html', './manifest.json'];
+
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    /* 하나라도 실패하면 설치 전체가 실패하므로 개별적으로 담습니다 */
-    await Promise.all(SHELL.map(async url => {
+
+    /* ⚠️ 2026-09-05 (A-4) — 예전에는 전부 개별 try/catch 로 담고 무조건 skipWaiting 했습니다.
+         신호가 약한 곳에서 sw.js(5KB)만 받고 index.html(208KB)을 못 받으면
+         빈 캐시로 새 버전이 활성화되고 → 아래 activate 가 멀쩡한 옛 캐시를 지워
+         【다음 오프라인 기동이 흰 화면】 이 됐습니다.
+         이제 필수 3개는 하나라도 실패하면 throw → 설치 실패 → 옛 버전이 그대로 남습니다.
+         (브라우저가 나중에 다시 시도합니다) */
+    for (const url of SHELL_REQUIRED) {
+      const res = await fetch(new Request(url, { cache: 'reload' }));
+      if (!res || !res.ok) throw new Error('[sw] 필수 파일 실패: ' + url + ' ' + (res && res.status));
+      await cache.put(url, res);
+    }
+
+    /* 아이콘은 없어도 앱은 켜집니다 — 실패해도 넘어갑니다 */
+    await Promise.all(SHELL.filter(u => SHELL_REQUIRED.indexOf(u) < 0).map(async url => {
       try { await cache.add(new Request(url, { cache: 'reload' })); }
-      catch (e) { console.warn('[sw] 담지 못함', url, e.message); }
+      catch (e) { console.warn('[sw] 담지 못함(선택)', url, e.message); }
     }));
+
     /* 새 버전을 곧바로 쓰게 합니다.
        이 앱은 화면이 파일 하나라서 「반은 옛것 반은 새것」이 될 일이 없습니다. */
     await self.skipWaiting();
@@ -71,7 +88,10 @@ self.addEventListener('fetch', event => {
   /* ③ 우리 집 파일 — 담아둔 것을 먼저 줍니다 (이게 오프라인 실행의 핵심) */
   event.respondWith((async () => {
     const cache  = await caches.open(CACHE);
-    const cached = await cache.match(req, { ignoreSearch: true });
+    /* 2026-09-05 (A-15) — 저장 키에서 ?token= 같은 쿼리를 뗍니다.
+       예전에는 req 그대로 put 해서 Cache Storage 에 토큰이 박힌 주소가 쌓였습니다. */
+    const key    = url.pathname;
+    const cached = await cache.match(key) || await cache.match(req, { ignoreSearch: true });
 
     if (cached) {
       /* 담아둔 것을 바로 주고, 뒤에서 조용히 새것을 받아둡니다.
@@ -79,7 +99,7 @@ self.addEventListener('fetch', event => {
       event.waitUntil((async () => {
         try {
           const fresh = await fetch(req);
-          if (fresh && fresh.ok) await cache.put(req, fresh.clone());
+          if (fresh && fresh.ok) await cache.put(key, fresh.clone());
         } catch (_) { /* 통신이 없으면 그냥 넘어갑니다 — 정상입니다 */ }
       })());
       return cached;
@@ -88,7 +108,7 @@ self.addEventListener('fetch', event => {
     /* 담아둔 게 없으면 인터넷에서 받아 담아둡니다 */
     try {
       const fresh = await fetch(req);
-      if (fresh && fresh.ok) await cache.put(req, fresh.clone());
+      if (fresh && fresh.ok) await cache.put(key, fresh.clone());
       return fresh;
     } catch (e) {
       /* 통신도 없고 담아둔 것도 없을 때 —

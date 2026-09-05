@@ -216,6 +216,10 @@ input[type=number]{-moz-appearance:textfield;}
       <label>이름</label>
       <input id="loginName" type="text" placeholder="이름을 입력하세요" autocomplete="name">
     </div>
+    <div class="fg">
+      <label>PIN</label>
+      <input id="loginPin" type="password" inputmode="numeric" placeholder="PIN (관리자에게 받은 숫자)" autocomplete="off">
+    </div>
     <button class="btn btn-pri" onclick="doLogin()">로그인</button>
   </div>
 </div>
@@ -357,7 +361,7 @@ input[type=number]{-moz-appearance:textfield;}
 var INJECTED_TOKEN = (function () {
   try {
     var q = new URLSearchParams(location.search).get('token');
-    if (q) { localStorage.setItem('sky_token', q); return q; }   /* 링크로 처음 들어온 경우 */
+    if (q) { localStorage.setItem('sky_token', q); try { history.replaceState(null, '', location.pathname + location.hash); } catch (_) {} return q; }   /* 링크로 처음 들어온 경우 — 주소에서 토큰을 지웁니다 (2026-09-06, A-15) */
     return localStorage.getItem('sky_token') || '';
   } catch (_) { return ''; }
 })();
@@ -450,7 +454,11 @@ let _draftTimer = null;
 const DRAFT_DEBOUNCE = 2500;
 
 async function saveDraftNow() {
-  if (!idb || !S.currentSite) return;
+  /* ⚠️ `!idb` 를 검사하지 않습니다 (2026-09-06 · A-6)
+        iOS 가 백그라운드에서 IDB 연결을 닫으면 idb 가 null 이 되는데, 바로 그 순간
+        (visibilitychange=hidden) 이 가장 중요한 저장 시점입니다. 예전에는 여기서 그냥
+        돌아가 버려 재연결(withIdb) 기회도 없이 초안을 잃었습니다. */
+  if (!S.currentSite) return;
   if (S.editing) return;                                  // 수정 모드는 대상 아님
   /* ⚠️ 제출을 끝낸 뒤에는 저장하지 않습니다 (2026-08-23)
         자동 임시저장은 2.5초 디바운스로 돕니다.
@@ -686,7 +694,16 @@ async function autoFlushSubmits(quiet) {
       }
     }
 
-    if (!quiet && R.ok > 0) toast(`✅ 대기 점검 ${R.ok}건 전송 완료`);
+    /* 실패도 알립니다 (2026-09-06 · A-12)
+       예전에는 성공했을 때만 토스트가 떠서, 로그인·연결 복구 때 뒤에서 돌던 전송이
+       실패해도 아무 표시가 없었습니다. 「이 기기 상태」에 사유를 남기고 한 줄 띄웁니다. */
+    if (R.fail > 0) {
+      S.lastFlushError = R.error || '알 수 없는 오류';
+      if (!quiet) toast(`⚠️ 전송 실패 ${R.fail}건 — 내 점검 탭에서 다시 시도`, 6000);
+    } else if (R.ok > 0) {
+      S.lastFlushError = '';
+      if (!quiet) toast(`✅ 대기 점검 ${R.ok}건 전송 완료`);
+    }
     await checkQueue();
     return R;
   } finally {
@@ -711,6 +728,12 @@ async function appInit() {
       if (r === null) {
         const saved = loadProfile();
         if (saved) { await afterLogin(saved, true); return; }
+      } else if (r && r.success === false) {
+        /* 서버가 분명히 「이 토큰은 안 된다」고 답했습니다 (2026-09-06 · A-22)
+           죽은 토큰을 그대로 두면 설치형 앱은 켤 때마다 같은 토큰으로 다시 시도하고,
+           api() 도 그 토큰을 계속 실어 보냅니다. 지우고 로그인 화면으로 갑니다. */
+        try { localStorage.removeItem('sky_token'); } catch (_) {}
+        if (r.error) toast(String(r.error), 4000);
       }
     }
   } catch(e) { console.warn('Token login fail', e); }
@@ -784,8 +807,10 @@ function loadProfile() {
 async function doLogin() {
   const name = document.getElementById('loginName').value.trim();
   if (!name) return toast('이름을 입력하세요');
+  /* 이름 로그인에는 PIN 이 붙습니다 (2026-09-05, S-2) — 이름만으로 토큰을 받던 길을 막았습니다 */
+  const pin = (document.getElementById('loginPin')?.value || '').trim();
 
-  const r = await api('login', {name});
+  const r = await api('login', {name, pin});
   if (r?.success) return afterLogin(r);
 
   /* 「직원이 아니다」와 「물어볼 데가 없다」는 전혀 다른 상황입니다.
@@ -796,7 +821,8 @@ async function doLogin() {
     if (saved && saved.name === name) return afterLogin(saved, true);
     return toast('📴 통신이 안 됩니다. 통신되는 곳에서 한 번 로그인해 두셔야 합니다');
   }
-  toast('등록된 직원이 아닙니다');
+  /* needPin(PIN 없음·미입력) 을 포함해 서버가 말해준 이유를 그대로 보여줍니다 */
+  toast((r && r.error) || '이름 또는 PIN이 맞지 않습니다', r?.needPin ? 5000 : 3000);
 }
 
 async function afterLogin(r, fromCache) {
@@ -812,8 +838,55 @@ async function afterLogin(r, fromCache) {
   if (r.role === '관리자') document.getElementById('tabAdmin').style.display = '';
   if (fromCache) toast('📴 오프라인 — 지난번 정보로 들어왔습니다');
   renderPrepInfo();
+  requestPersistentStorage_();   // 기다리지 않음 — 저장소 보존 요청 (A-16)
   await loadSites();
-  autoFlushSubmits();  // 로그인 직후 대기 제출 자동 전송
+  /* 다른 사람 이름으로 담긴 대기 건이 있으면 먼저 알립니다 (A-19).
+     전송 토스트가 곧바로 덮어쓰지 않도록, 경고를 띄운 경우에만 전송을 잠깐 늦춥니다. */
+  const warned = await warnForeignQueue_(r.name);
+  setTimeout(() => autoFlushSubmits(), warned ? 4500 : 0);   // 로그인 직후 대기 제출 자동 전송
+}
+
+/* ── 저장소 영구 보존 요청 (2026-09-06 · A-16) ─────────────────────────
+   브라우저는 저장 공간이 빠듯하면 「best-effort」 사이트의 IndexedDB 를 통째로 지울 수 있습니다.
+   대기함(submitQ)·임시저장(draftQ)이 그 안에 있습니다 — 전송 못 한 점검이 통째로 날아가는 길입니다.
+   persist() 가 허락되면 그 위험이 사라집니다. 거절되면 기기당 한 번만 주의를 띄웁니다. */
+let _persistAsked = false;
+async function requestPersistentStorage_() {
+  if (_persistAsked) return;
+  _persistAsked = true;
+  try {
+    if (!navigator.storage || typeof navigator.storage.persist !== 'function') return;
+    if (typeof navigator.storage.persisted === 'function' && await navigator.storage.persisted()) return;
+    const ok = await navigator.storage.persist();
+    if (ok) { console.log('저장소 영구 보존 허락됨'); return; }
+    const FLAG = 'persistDeniedWarned_v1';
+    if (localStorage.getItem(FLAG)) return;
+    localStorage.setItem(FLAG, new Date().toISOString());
+    toast('⚠️ 이 기기는 공간이 부족하면 대기 중인 점검을 지울 수 있습니다 — 점검을 마치면 바로 전송해 주세요', 7000);
+  } catch (e) { console.warn('storage.persist 실패', e && e.message); }
+}
+
+/* ── 대기함에 다른 점검원의 점검이 있는지 (2026-09-06 · A-19) ───────────────
+   서버는 제출·사진의 점검자 이름을 【토큰 주인】으로 고쳐 기록합니다 (0-7).
+   기기를 바꿔 쓰거나 다른 사람 계정으로 로그인하면 대기 건이 현재 로그인 이름으로 올라갑니다.
+   지우지도, 막지도 않습니다 — 알기만 하면 본인이 판단할 수 있습니다.
+   @return {boolean} 경고를 띄웠으면 true */
+async function warnForeignQueue_(myName) {
+  try {
+    const items = (await withIdb(db => new Promise(res => {
+      const req = db.transaction(IDB_SUBMIT, 'readonly').objectStore(IDB_SUBMIT).getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => res([]);
+    }))) || [];
+    const me = String(myName || '').trim();
+    const others = items
+      .map(it => String((it && it.payload && it.payload.data && it.payload.data.점검자) || '').trim())
+      .filter(n => n && n !== me);
+    if (!others.length) return false;
+    const names = Array.from(new Set(others)).join(', ');
+    toast(`대기함에 다른 점검원(${names})의 점검 ${others.length}건이 있습니다 — 전송하면 현재 로그인 이름으로 기록됩니다`, 8000);
+    return true;
+  } catch (_) { return false; }
 }
 /**
  * 발전소 목록 (H-1)
@@ -901,14 +974,15 @@ function renderSites(list) {
     el.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted);line-height:1.6;">' + msg + '</div>';
     return;
   }
+  // 시트에서 온 문자열은 본문 escT_ · 속성 escAttr (2026-09-06 · A-14)
   el.innerHTML = list.map(s => `
-    <div class="site-item" onclick="openSite('${s.no}')">
+    <div class="site-item" onclick="openSite('${escAttr(s.no)}')">
       <div>
-        <div class="site-name">${s.name}</div>
-        <div class="site-meta">${s.설비구분||''} · ${s.capacity||''}kW</div>
-        <div class="site-addr">📍 ${s.설비위치||s.시군||'-'}</div>
+        <div class="site-name">${escT_(s.name)}</div>
+        <div class="site-meta">${escT_(s.설비구분||'')} · ${escT_(s.capacity||'')}kW</div>
+        <div class="site-addr">📍 ${escT_(s.설비위치||s.시군||'-')}</div>
       </div>
-      <span class="badge">${s.manager||''}</span>
+      <span class="badge">${escT_(s.manager||'')}</span>
     </div>`).join('');
 }
 
@@ -947,20 +1021,21 @@ async function openSite(no) {
   var cleanPasscode = String(site.출입비번 || '-').replace(/\/+$/, '').trim();
   var addrStr = site.설비위치 || site.시군 || '-';
   var siteNo  = site.no;
+  var siteNoA = escAttr(siteNo);   // onclick 인자용 (A-14)
 
   // ⚠️ 중첩 템플릿 리터럴(${cond ? `...` : ''})을 쓰지 않습니다.
   //    GAS 아이프레임 샌드박스에서 페이지가 통째로 렌더되지 않는 문제가 있었습니다.
   //    버튼 HTML은 미리 문자열로 조립해 두고 한 번만 끼워 넣습니다.
   var btnStyle  = 'border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;';
   var copyBtn   = '<button type="button" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;' + btnStyle
-                + '" onclick="copyAddressByNo(event, \'' + siteNo + '\')">&#128203; 주소 복사</button>';
+                + '" onclick="copyAddressByNo(event, \'' + siteNoA + '\')">&#128203; 주소 복사</button>';
   var naviBtn   = '<button type="button" style="background:#2563eb;color:#fff;border:none;' + btnStyle
-                + '" onclick="autoOpenNaviByNo(event, \'' + siteNo + '\')">&#129517; 네비안내</button>';
+                + '" onclick="autoOpenNaviByNo(event, \'' + siteNoA + '\')">&#129517; 네비안내</button>';
   var passBtn   = '';
   if (cleanPasscode !== '-') {
     passBtn = '<button type="button" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;'
             + 'border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;margin-left:10px;'
-            + '" onclick="copyPasscodeByNo(event, \'' + siteNo + '\')">&#128273; 비번 복사</button>';
+            + '" onclick="copyPasscodeByNo(event, \'' + siteNoA + '\')">&#128273; 비번 복사</button>';
   }
 
   var tdKey = 'padding:.45rem .2rem;color:var(--muted);width:75px;vertical-align:top;';
@@ -971,20 +1046,20 @@ async function openSite(no) {
   document.getElementById('siteInfoEl').innerHTML =
       '<table style="width:100%;border-collapse:collapse;font-size:.88rem;">'
     + '<tr><td style="' + tdKey + '">발전소명</td>'
-    + '<td style="padding:.45rem .2rem;font-weight:700;color:#0f172a;">' + site.name + '</td></tr>'
+    + '<td style="padding:.45rem .2rem;font-weight:700;color:#0f172a;">' + escT_(site.name) + '</td></tr>'
     + '<tr><td style="' + tdKey + '">용량</td>'
-    + '<td style="' + tdVal + '">' + ((site.capacity || '-') + 'kW') + '</td></tr>'
+    + '<td style="' + tdVal + '">' + escT_((site.capacity || '-') + 'kW') + '</td></tr>'
     + '<tr><td style="' + tdKey + '">위치</td>'
-    + '<td style="' + tdVal + 'line-height:1.4;">' + addrStr
+    + '<td style="' + tdVal + 'line-height:1.4;">' + escT_(addrStr)
     + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">' + copyBtn + naviBtn + '</div>'
     + '</td></tr>'
     + '<tr><td style="' + tdKey + '">출입비번</td>'
     + '<td style="padding:.45rem .2rem;">'
-    + '<span style="color:#2563eb;font-weight:800;font-size:1.05rem;">' + cleanPasscode + '</span>'
+    + '<span style="color:#2563eb;font-weight:800;font-size:1.05rem;">' + escT_(cleanPasscode) + '</span>'
     + passBtn
     + '</td></tr>'
     + '<tr><td style="' + tdKey + '">점검회차</td>'
-    + '<td style="' + tdVal + '"><div id="seqPickRow">' + ((site.점검회차 || '-') + '회/월') + '</div></td></tr>'
+    + '<td style="' + tdVal + '"><div id="seqPickRow">' + escT_((site.점검회차 || '-') + '회/월') + '</div></td></tr>'
     + '</table>';
   document.getElementById('inspModal').classList.add('show');
   document.body.style.overflow = 'hidden';
@@ -999,25 +1074,45 @@ async function openSite(no) {
     });
   }
 
-  // 설비정보/미결사항/전달사항은 백그라운드 병렬 로드
-  S.equipReady = fetchEquipInfo(no).then(equip => {
+  /* ── 설비정보 / 미결사항 / 제출 목록 — 받아둔 것 먼저, 서버 값은 뒤에서 (2026-09-06 · A-11)
+     예전에는 받아둔 것이 있어도 서버 응답(느린 현장에서 최대 30초 × 3)을 차례로 기다린 뒤에야
+     폼이 그려졌습니다. 이제 받아둔 것이 있으면 즉시 그리고, 서버 값이 【다를 때만】 다시 그립니다. */
+  const stillHere = () => S.currentSite === site;   // 기다리는 사이 다른 발전소를 열었으면 무시
+
+  const cachedEquip = readCache_('equip_' + no);
+  if (cachedEquip) S.currentEquip = cachedEquip;
+  const equipP = fetchEquipInfo(no).then(equip => {
+    if (!stillHere()) return equip;
+    const changed = !sameJson_(equip, S.currentEquip);
     S.currentEquip = equip;
-    // 이미 점검폼이 열려 있으면 채널 반영 위해 다시 그림
-    if (document.getElementById('mt-form')?.classList.contains('active')
-        && document.getElementById('formEl').innerHTML) {
-      buildForm(currentInspType);
+    // 이미 점검폼이 열려 있고 설비정보가 달라졌으면 입력값을 지키면서 다시 그림 (채널 구성 반영)
+    if (changed && equip && document.getElementById('formEl')?.innerHTML) {
+      rebuildFormKeepValues_();
     }
     return equip;
   });
-  fetchPendingFaults(no).then(faults => renderPendingBanner(faults || []));
+  S.equipReady = cachedEquip ? Promise.resolve(cachedEquip) : equipP;
+
+  const cachedFaults = readCache_('fault_' + no);
+  if (Array.isArray(cachedFaults)) renderPendingBanner(cachedFaults);
+  fetchPendingFaults(no).then(faults => {
+    if (!stillHere()) return;
+    if (!Array.isArray(cachedFaults) || !sameJson_(faults, cachedFaults)) renderPendingBanner(faults || []);
+  });
 
   // 이번 달 제출 목록 → 회차 선택 / 수정 버튼
-  fetchSiteInspections(siteNo).then(list => {
+  const applyInspList = async (list) => {
+    if (!stillHere()) return;
     S.siteInspections = Array.isArray(list) ? list : [];
     renderSeqPicker(site);
     // 목록을 받은 뒤 회차와 전월송전전력을 다시 계산합니다
-    if (typeof calcSeq === 'function') calcSeq();
+    if (typeof calcSeq === 'function') await calcSeq();
     if (typeof autoFillPrevPower === 'function') autoFillPrevPower();
+  };
+  const cachedInsp = readSiteInspectionsCache_(siteNo);   // 이번 달 것일 때만 값이 옵니다
+  if (cachedInsp) applyInspList(cachedInsp);
+  fetchSiteInspections(siteNo).then(list => {
+    if (!cachedInsp || !sameJson_(list, cachedInsp)) applyInspList(list);
   });
 
   showNoticeIfAny(site);
@@ -1028,7 +1123,7 @@ async function openSite(no) {
 function renderSeqPicker(site) {
   const el = document.getElementById('seqPickRow');
   if (!el) return;
-  const total = (site.점검회차 || '-') + '회/월';
+  const total = escT_((site.점검회차 || '-') + '회/월');
   const list = S.siteInspections || [];
 
   if (!list.length) {
@@ -1039,8 +1134,8 @@ function renderSeqPicker(site) {
   let opts = '';
   for (let i = 0; i < list.length; i++) {
     const it = list[i];
-    opts += '<option value="' + it.inspId + '">'
-          + it.seq + '회차 · ' + (it.점검일자 || '')
+    opts += '<option value="' + escAttr(it.inspId) + '">'
+          + escT_(it.seq) + '회차 · ' + escT_(it.점검일자 || '')
           + (it.수정일시 ? ' (수정됨)' : '')
           + '</option>';
   }
@@ -1287,6 +1382,7 @@ async function discardDraft() {
   const el = document.getElementById('draftBanner');
   if (el) el.remove();
   S.photoMap = {};
+  if (typeof renderAllPhotoGrids_ === 'function') renderAllPhotoGrids_();   // 폼이 이미 그려져 있으면 그리드도 비웁니다 (A-1)
   toast('새로 작성합니다.');
 }
 
@@ -1327,13 +1423,13 @@ function markEditMode(r, missed) {
     warn = '<div style="margin-top:.5rem;padding:.5rem .6rem;background:#fef2f2;border:1px solid #fecaca;'
          + 'border-radius:8px;font-size:.78rem;color:#991b1b;line-height:1.45;">'
          + '⚠️ 화면에 없는 항목 ' + missed.length + '건은 표시되지 않았습니다. '
-         + '저장하면 <b>기존 값이 유지</b>됩니다.<br>' + missed.join(', ')
+         + '저장하면 <b>기존 값이 유지</b>됩니다.<br>' + escT_(missed.join(', '))
          + '</div>';
   }
 
   const banner =
       '<div id="editModeBanner" style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:.7rem .9rem;margin-bottom:.7rem;">'
-    + '<div style="font-weight:700;color:#b45309;font-size:.9rem;">✏️ 수정 모드 · ' + (r.inspId || '') + '</div>'
+    + '<div style="font-weight:700;color:#b45309;font-size:.9rem;">✏️ 수정 모드 · ' + escT_(r.inspId || '') + '</div>'
     + '<div style="font-size:.82rem;color:#78350f;margin-top:.35rem;line-height:1.5;">'
     + '기존 기록을 덮어씁니다. 사진은 <b>추가만</b> 되며 이미 올린 사진은 그대로 유지됩니다.</div>'
     + warn
@@ -1418,13 +1514,14 @@ async function showNoticeIfAny(site) {
     const typeClass = n.type === 'common' ? 'common' : 'site';
     const levelBadge = n.level !== '일반'
       ? `<span style="background:${n.level==='긴급'?'#fee2e2':'#fff7ed'};color:${n.level==='긴급'?'#dc2626':'#d97706'};
-              padding:1px 7px;border-radius:8px;font-size:.72rem;font-weight:700;margin-left:.4rem;">${n.level}</span>`
+              padding:1px 7px;border-radius:8px;font-size:.72rem;font-weight:700;margin-left:.4rem;">${escT_(n.level)}</span>`
       : '';
+    // 전달사항 본문은 관리자가 자유롭게 적는 글입니다 — 태그로 해석되지 않게 escT_ 뒤에 줄바꿈만 <br> (A-14)
     return `
       <div class="notice-item ${typeClass}">
         <div class="n-type">${typeLabel}${levelBadge}</div>
-        <div class="n-text">${n.text.replace(/\n/g,'<br>')}</div>
-        ${n.date ? `<div class="n-date">${n.date}</div>` : ''}
+        <div class="n-text">${escT_(n.text).replace(/\n/g,'<br>')}</div>
+        ${n.date ? `<div class="n-date">${escT_(n.date)}</div>` : ''}
       </div>`;
   }).join('');
 
@@ -1498,10 +1595,10 @@ function renderCommonNoticePreview(data) {
   if (!data?.text) { el.innerHTML = '(없음)'; return; }
   const levelColor = data.level==='긴급'?'#dc2626':data.level==='중요'?'#d97706':'#166534';
   el.innerHTML = `
-    <span style="color:${levelColor};font-weight:700;">[${data.level}]</span>
-    ${data.text.replace(/\n/g,'<br>')}
+    <span style="color:${levelColor};font-weight:700;">[${escT_(data.level)}]</span>
+    ${escT_(data.text).replace(/\n/g,'<br>')}
     <div style="color:var(--muted);font-size:.76rem;margin-top:.3rem;">
-      저장: ${data.savedAt||''}${data.expiry?' · 만료: '+data.expiry:''}
+      저장: ${escT_(data.savedAt||'')}${data.expiry?' · 만료: '+escT_(data.expiry):''}
     </div>`;
 }
 
@@ -1518,11 +1615,11 @@ function renderPendingBanner(faults) {
       <h3>⚠️ 전회차 미결사항 ${faults.length}건</h3>
       ${faults.map(f => `
         <div class="pending-item">
-          <div>[${f.발생일자}] ${f.장애내용}</div>
-          <div style="color:var(--muted);font-size:.8rem;">조치: ${f.조치구분} · 상태: ${f.완료여부}</div>
+          <div>[${escT_(f.발생일자)}] ${escT_(f.장애내용)}</div>
+          <div style="color:var(--muted);font-size:.8rem;">조치: ${escT_(f.조치구분)} · 상태: ${escT_(f.완료여부)}</div>
           <div style="display:flex;gap:.4rem;margin-top:.3rem;">
-            <button class="btn btn-ok btn-sm" onclick="resolveFault('${f.faultId}','완료')">✅ 확인완료</button>
-            <button class="btn btn-out btn-sm" onclick="resolveFault('${f.faultId}','진행중')">🔄 처리중</button>
+            <button class="btn btn-ok btn-sm" onclick="resolveFault('${escAttr(f.faultId)}','완료')">✅ 확인완료</button>
+            <button class="btn btn-out btn-sm" onclick="resolveFault('${escAttr(f.faultId)}','진행중')">🔄 처리중</button>
           </div>
         </div>`).join('')}
     </div>`;
@@ -1619,22 +1716,70 @@ function 기본칸조립_(items) {
   return out;
 }
 
+/* 폼을 몇 번째로 그렸는지 — 뒤늦게 온 서버 응답이 옛 폼을 건드리지 않게 하는 표식 */
+let _formBuildSeq = 0;
+
+/**
+ * 폼을 입력값을 지키면서 다시 그립니다 (2026-09-06 · A-11)
+ *  받아둔 것으로 먼저 그린 뒤 서버 값(설비정보·점검항목)이 다르게 오면 여기로 옵니다.
+ *  ⚠️ buildForm 은 formEl.innerHTML 을 통째로 바꾸므로 그냥 부르면 적던 값이 다 사라집니다.
+ *     값을 떠 두고 → 첫 점검구분으로 뼈대 → 나머지 구분 추가(selectInspType) → 값 복원 순서입니다.
+ *     (예전 코드는 currentInspType 이 '월차점검+측정' 처럼 결합된 채로 buildForm 을 불러
+ *      어느 구분과도 맞지 않는 빈 폼이 되기도 했습니다)
+ */
+async function rebuildFormKeepValues_() {
+  const formEl = document.getElementById('formEl');
+  if (!formEl || !formEl.innerHTML) return;
+  const site = S.currentSite;
+  const saved = {};
+  formEl.querySelectorAll('input, textarea, select').forEach(el => {
+    if (el.id && el.value !== '' && el.type !== 'file') saved[el.id] = el.value;
+  });
+  const types = (S.inspTypes || []).slice();
+  if (!types.length) types.push('월차점검');
+
+  formEl.innerHTML = '';
+  currentInspType = types[0];
+  S.inspTypes = [types[0]];
+  await buildForm(types[0]);
+  if (S.currentSite !== site) return;
+  for (let i = 1; i < types.length; i++) await selectInspType(types[i]);
+
+  Object.entries(saved).forEach(([id, v]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = v;
+    if (el.type === 'hidden' && typeof setOX === 'function') setOX(id, v);
+  });
+  const fa = document.getElementById('f_action');
+  if (fa && typeof toggleAction === 'function') toggleAction(fa.value || '없음');
+  if (S.editing && typeof markEditMode === 'function') markEditMode(S.editing, []);   // 수정 모드 배너 복원
+}
+
 async function buildForm(inspType) {
   const site   = S.currentSite;
+  const buildId = ++_formBuildSeq;
   // 설비정보 로딩이 끝나지 않았으면 대기 (측정 채널 표시에 필요)
   if (!S.currentEquip && S.equipReady) { try { await S.equipReady; } catch(_) {} }
   const equip  = S.currentEquip || {};
   const today  = new Date().toISOString().split('T')[0];
   const isLow  = (site.설비구분||'').includes('일반저압');
   const isSub  = equip.변압기수량 > 0;
-  const items = await fetchCheckItems(site, inspType);
+
+  /* 점검항목 — 받아둔 것이 있으면 즉시, 없을 때만 서버를 기다립니다. 두 조회는 나란히 (2026-09-06 · A-11)
+     예전에는 inspType 항목 → 전체('') 항목을 차례로 서버에서 기다렸습니다. */
+  const [ciCur, ciAll] = await Promise.all([
+    fetchCheckItemsFast_(site, inspType),
+    fetchCheckItemsFast_(site, '')
+  ]);
+  const items = ciCur.items;
   S.checkItems = items || [];
 
   // ── 이 발전소에서 사용 가능한 점검구분 목록 미리 조회 (아코디언 표시 여부 결정) ──
   //   전체 항목을 inspType 필터 없이 조회해서 존재하는 점검구분 수집
   let 기본항목 = [];
   try {
-    const allItems = await fetchCheckItems(site, '');
+    const allItems = ciAll.items;
     const avail = {};
     (allItems || []).forEach(it => { avail[it.점검구분] = true; });
     // 「기본」은 아코디언이 아니라 맨 위에 바로 그립니다 → 목록에서 뺍니다
@@ -1702,8 +1847,8 @@ async function buildForm(inspType) {
 
   let html = '';
   html += `<div class="card" style="background:#f0f4ff;font-size:.88rem;padding:.75rem 1rem;margin-bottom:.75rem;">
-    <div style="font-weight:700;">${site.name}</div>
-    <div style="color:var(--muted);margin-top:.2rem;font-size:.82rem;">📍 ${site.설비위치||'주소 미등록'}</div>
+    <div style="font-weight:700;">${escT_(site.name)}</div>
+    <div style="color:var(--muted);margin-top:.2rem;font-size:.82rem;">📍 ${escT_(site.설비위치||'주소 미등록')}</div>
   </div>`;
   html += `
   <div class="row2">
@@ -1725,8 +1870,6 @@ async function buildForm(inspType) {
 
   document.getElementById('formEl').innerHTML = html;
   renderWeatherHint();   // 오프라인이면 「날씨는 직접 적어주세요」 표시
-  calcSeq();
-  autoFillPrevPower();
   renderInvKwhSection(equip);
   renderTrTempSection(equip, isSub);
   S.inspTypes = [inspType];  // 초기 선택 상태
@@ -1734,6 +1877,20 @@ async function buildForm(inspType) {
   //    다음 점검을 하려는데 이전 점검 내용이 나타나는 원인이었습니다.
   //    「작성 중」 복원은 자동 임시저장(초안)이 담당합니다.
   renderInspSection([inspType], site, equip, isLow, isSub, sections);
+  // 회차는 대기함(IDB)도 세므로 비동기입니다 — 폼이 다 그려진 뒤 채웁니다 (A-10)
+  await calcSeq();
+  autoFillPrevPower();
+
+  /* 받아둔 것으로 그렸다면 서버 값이 다르게 왔을 때만 다시 그립니다 (A-11)
+     그 사이 다른 발전소를 열었거나 폼을 새로 그렸으면(buildId 불일치) 건드리지 않습니다. */
+  Promise.all([ciCur.refresh, ciAll.refresh]).then(([nCur, nAll]) => {
+    if (!nCur && !nAll) return;
+    if (buildId !== _formBuildSeq || S.currentSite !== site) return;
+    if (!document.getElementById('formEl')?.innerHTML) return;
+    S.checkItemsCache = {};              // selectInspType 의 메모리 캐시도 새로 읽게
+    rebuildFormKeepValues_();
+    toast('점검항목이 바뀌어 화면을 새로 그렸습니다 (입력값은 유지)', 4000);
+  }).catch(() => {});
 }
 function renderInvKwhSection(equip) {
   const el = document.getElementById('invKwhSection');
@@ -2050,21 +2207,69 @@ async function fetchCached(key, action, params) {
   return null;
 }
 
+/** 받아둔 값 읽기 — 없거나 깨졌으면 null */
+function readCache_(key) {
+  try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; }
+}
+/** 두 값이 내용까지 같은가 (서버 값이 받아둔 것과 다를 때만 화면을 다시 그리려고) */
+function sameJson_(a, b) {
+  try { return JSON.stringify(a) === JSON.stringify(b); } catch (_) { return false; }
+}
+
+/**
+ * 점검항목 — 받아둔 것 먼저, 서버 값은 뒤에서 (2026-09-06 · A-11)
+ *  fetchCheckItems 는 온라인이면 반드시 서버 응답을 기다립니다(최대 30초).
+ *  받아둔 것이 있으면 그걸로 즉시 그리고, 서버 응답은 refresh 로 넘겨 바뀐 경우에만 반영합니다.
+ *  @return {{items:Array, refresh:Promise<Array|null>}}  refresh 는 서버 값(없으면 null)
+ */
+async function fetchCheckItemsFast_(site, inspType) {
+  const key = 'ci_' + [site?.설비구분 || '', inspType || '', site?.측정프로필 || ''].join('|');
+  const cached = readCache_(key);
+  if (Array.isArray(cached)) {
+    const refresh = S.isOnline
+      ? fetchCheckItems(site, inspType).then(n => (Array.isArray(n) && !sameJson_(n, cached)) ? n : null).catch(() => null)
+      : Promise.resolve(null);
+    return { items: cached, refresh };
+  }
+  return { items: await fetchCheckItems(site, inspType), refresh: Promise.resolve(null) };
+}
+
 /** 설비정보 (인버터 수량·채널 구성) — 없으면 점검표를 그릴 수 없습니다 */
 function fetchEquipInfo(no) {
   if (!no) return Promise.resolve(null);
   return fetchCached('equip_' + no, 'getEquipInfo', { no });
 }
 
+/* 이번 달 ('yyyy-MM') — 제출 목록 캐시의 달 표시용 */
+function curYm_() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+/** 받아둔 제출 목록 — 이번 달 것일 때만 돌려줍니다 (다른 달 것은 없는 셈) */
+function readSiteInspectionsCache_(no) {
+  const c = readCache_('insp_' + no);
+  // 옛 형식(배열만)은 어느 달 것인지 몰라 버립니다 — 지난달 회차가 이번 달에 이어지는 사고 방지
+  if (!c || !Array.isArray(c.list)) return null;
+  return c.ym === curYm_() ? c.list : null;
+}
+
 /**
  * 이번 달 제출 목록 — 점검회차 계산에 씁니다.
  *  ⚠️ 이게 없으면 회차가 항상 「1회차」로 잡힙니다.
  *     한 달에 두 번 가는 발전소에서 두 번째 점검이 1회차로 기록됩니다.
+ *  캐시에는 받은 달(ym)을 함께 남깁니다 (2026-09-06 · A-10).
+ *  예전에는 달 표시가 없어, 지난달 말에 받아둔 목록으로 이번 달 첫 점검이 「3회차」가 됐습니다.
  */
 async function fetchSiteInspections(no) {
   if (!no) return [];
-  const r = await fetchCached('insp_' + no, 'getSiteInspections', { no });
-  return Array.isArray(r) ? r : [];
+  const r = await api('getSiteInspections', { no });
+  if (Array.isArray(r)) {
+    try { localStorage.setItem('insp_' + no, JSON.stringify({ ym: curYm_(), list: r })); } catch (_) {}
+    return r;
+  }
+  const cached = readSiteInspectionsCache_(no);
+  if (cached) { console.log('오프라인 — 저장된 제출 목록 사용:', no); return cached; }
+  return [];
 }
 
 /** 미결사항 — 지난 점검에서 넘어온 조치 필요 항목 */
@@ -2153,7 +2358,10 @@ async function prepareOffline() {
 
   /* 점검항목은 「설비구분 + 점검구분 + 측정프로필」이 같으면 내용도 같습니다.
      발전소마다 부르면 같은 것을 여러 번 받게 되므로 중복을 걷어냅니다. */
-  const TYPES = ['월차점검', '기록', '측정', '열화상촬영'];
+  /* '' (전체 — buildForm 이 「기본」칸과 아코디언 표시 여부를 이걸로 정합니다) ·
+     분기점검·반기점검·긴급출동도 받아둡니다 (2026-09-06 · A-9)
+     예전에는 '' 를 안 받아 오프라인에서 S.availTypes 가 비어 「기록」 아코디언이 사라졌습니다. */
+  const TYPES = ['', '월차점검', '기록', '측정', '열화상촬영', '분기점검', '반기점검', '긴급출동'];
   const itemJobs = new Map();
   list.forEach(s => TYPES.forEach(t => {
     const k = [s.설비구분 || '', t, s.측정프로필 || ''].join('|');
@@ -2395,6 +2603,12 @@ function renderInspSection(inspTypeOrTypes, site, equip, isLow, isSub, sections)
     }
   });
 
+  // ── 조치구분에 따른 「요청 내용」 칸 표시 복원 (2026-09-06 · A-20) ──
+  //  값은 위에서 되살렸지만 actionDetail/vendorWrap 의 display 는 새로 그린 기본값(none)이라
+  //  조치내용을 적어둔 채 아코디언을 탭하면 칸이 접혀 「지워진 것처럼」 보였습니다.
+  const fAction = document.getElementById('f_action');
+  if (fAction && typeof toggleAction === 'function') toggleAction(fAction.value || '없음');
+
   // ── 사진 카운트·뱃지 복원 (2026-09-04 · R-3) ──
   //  재렌더링으로 버튼이 새로 그려지면 「📷 N」 표시와 충족(done) 상태가
   //  사라집니다. S.photoMap 기준으로 전부 다시 칠합니다.
@@ -2440,7 +2654,7 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
         style="width:100%;padding:.75rem;border:1.5px dashed var(--border);border-radius:10px;
                background:#f8fafc;font-size:.9rem;cursor:pointer;">📷 사진 추가</button>
     </div>
-    <div class="photo-grid" id="thermalGrid"></div>`;
+    <div class="photo-grid" id="thermalGrid">${renderPhotoGridHtml_('thermal')}</div>`;
     return html;
   }
   if (inspType === '긴급출동') {
@@ -2478,25 +2692,27 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
         chGroupRendered = true;
         let h = '';
         equip.channels.forEach((ch, i) => {
-          const lbl = ch.label || `No${ch.slot || i + 1}`;
+          // 시트에서 온 문자열(명판·항목명·단위)은 escT_/escAttr 로 감쌉니다 (2026-09-06 · A-14)
+          const lbl = escT_(ch.label || `No${ch.slot || i + 1}`);
+          const cnt = Number(ch.count) || 0;
           h += `<div style="border:1.5px solid var(--border);border-radius:10px;padding:.6rem .7rem;margin-bottom:.5rem;background:#fafcff;">
-            <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">${lbl} <span class="ch-hint">${ch.count}채널</span></div>`;
+            <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">${lbl} <span class="ch-hint">${cnt}채널</span></div>`;
           chItems.forEach(item => {
-            const u = item.단위 ? ` (${item.단위})` : '';
+            const u = item.단위 ? ` (${escT_(item.단위)})` : '';
             if (item.항목ID === 'ch_current' || /채널.*전류/.test(item.항목명)) {
               h += `<div class="fg" style="margin-bottom:.4rem;">
-                <label>${item.항목명}${u}
-                  ${isDevUser()?`<button class="cam-btn" type="button" onclick="randomFill('ch_${i}',${ch.count})" style="margin-left:.2rem;">🎲</button>`:''}
+                <label>${escT_(item.항목명)}${u}
+                  ${isDevUser()?`<button class="cam-btn" type="button" onclick="randomFill('ch_${i}',${cnt})" style="margin-left:.2rem;">🎲</button>`:''}
                 </label>
                 <input class="ch-input" type="text" id="ch_${i}" inputmode="decimal"
-                       placeholder="${Array.from({length:Math.min(ch.count,5)},(_,j)=>j===0?'2.3':'0.0').join('/')+'...'}"
-                       oninput="autoSlash(this,${ch.count})" onblur="validateCh(this,${ch.count},'${ch.label||''}',${ch.slot||i+1})">
+                       placeholder="${Array.from({length:Math.min(cnt,5)},(_,j)=>j===0?'2.3':'0.0').join('/')+'...'}"
+                       oninput="autoSlash(this,${cnt})" onblur="validateCh(this,${cnt},'${escAttr(ch.label||'')}',${Number(ch.slot)||i+1})">
                 <div class="ch-status" id="chs_${i}"></div>
               </div>`;
             } else {
               h += `<div class="fg" style="margin-bottom:.4rem;">
-                <label>${item.항목명}${u}</label>
-                <input type="text" id="item_${item.항목ID}_${i+1}" inputmode="decimal" placeholder="${item.단위||''}" oninput="handleSmartInput(this)">
+                <label>${escT_(item.항목명)}${u}</label>
+                <input type="text" id="item_${escAttr(item.항목ID)}_${i+1}" inputmode="decimal" placeholder="${escAttr(item.단위||'')}" oninput="handleSmartInput(this)">
               </div>`;
             }
           });
@@ -2507,36 +2723,40 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
 
       measureItems.forEach(item => {
         const t = item.입력유형;
-        const unit = item.단위 ? ` (${item.단위})` : '';
+        // 시트 문자열은 본문은 escT_, 속성·onclick 인자는 escAttr (2026-09-06 · A-14)
+        //  ⚠️ 예전 onclick 은 따옴표만 지웠습니다(replace(/'/g,'')) — 항목명에 " 나 < 가 있으면 깨졌습니다.
+        const nameT = escT_(item.항목명), nameA = escAttr(item.항목명);
+        const idA   = escAttr(item.항목ID), unitA = escAttr(item.단위 || '');
+        const unit = item.단위 ? ` (${escT_(item.단위)})` : '';
         if (t === '채널반복') {
           // 첫 채널반복 항목 위치에서 그룹 전체 렌더 (이후 항목은 스킵)
           html += renderChGroup();
         } else if (t === '3상') {
           // 3상 측정 — A/B/C상을 "/" 구분 한 줄 입력, [+ 추가]로 호기 확장
           html += `<div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
-            <span style="font-size:.83rem;font-weight:700;color:var(--muted);">${item.항목명}${unit} <span style="font-weight:400;font-size:.75rem;">${item.비고 || 'A/B/C상 · / 구분'}</span></span>
+            <span style="font-size:.83rem;font-weight:700;color:var(--muted);">${nameT}${unit} <span style="font-weight:400;font-size:.75rem;">${escT_(item.비고 || 'A/B/C상 · / 구분')}</span></span>
             <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);"
-              onclick="addPhaseSet('${item.항목ID}','${(item.항목명||'').replace(/'/g,'')}','${item.단위||''}')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('${item.항목ID}','${(item.항목명||'').replace(/'/g,'')}')">− 제거</button>
+              onclick="addPhaseSet('${idA}','${nameA}','${unitA}')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('${idA}','${nameA}')">− 제거</button>
           </div>
-          <div id="ph_wrap_${item.항목ID}">
+          <div id="ph_wrap_${idA}">
             ${renderPhaseSet(item.항목ID, 1, item.단위)}
           </div>`;
         } else if (t === '숫자반복') {
           // 호기별 단일값 입력 + [+ 추가] (VCB/ACB 발전량 등)
           html += `<div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
-            <span style="font-size:.83rem;font-weight:700;color:var(--muted);">${item.항목명}${unit}</span>
+            <span style="font-size:.83rem;font-weight:700;color:var(--muted);">${nameT}${unit}</span>
             <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);"
-              onclick="addNumSet('${item.항목ID}','${(item.항목명||'').replace(/'/g,'')}','${item.단위||''}')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removeNumSet('${item.항목ID}','${(item.항목명||'').replace(/'/g,'')}')">− 제거</button>
+              onclick="addNumSet('${idA}','${nameA}','${unitA}')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removeNumSet('${idA}','${nameA}')">− 제거</button>
           </div>
-          <div id="num_wrap_${item.항목ID}">
+          <div id="num_wrap_${idA}">
             ${renderNumSet(item.항목ID, 1, item.단위)}
           </div>`;
         } else if (t === '숫자') {
-          html += `<div class="fg"><label>${item.항목명}${unit}</label>
-            <input type="text" id="item_${item.항목ID}" inputmode="decimal" placeholder="${item.단위||''}" oninput="handleSmartInput(this)"></div>`;
+          html += `<div class="fg"><label>${nameT}${unit}</label>
+            <input type="text" id="item_${idA}" inputmode="decimal" placeholder="${unitA}" oninput="handleSmartInput(this)"></div>`;
         } else if (t === '텍스트') {
-          html += `<div class="fg"><label>${item.항목명}</label>
-            <textarea id="item_${item.항목ID}"></textarea></div>`;
+          html += `<div class="fg"><label>${nameT}</label>
+            <textarea id="item_${idA}"></textarea></div>`;
         } else if (t === 'OX2' || t === 'OX2_NA' || t === 'OX') {
           html += `<div class="ox-table">${renderOXRow(item)}</div>`;
         }
@@ -2649,15 +2869,15 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
         if (item.입력유형 === 'OX' || item.입력유형 === 'OX2' || item.입력유형 === 'OX2_NA') {
           html += renderOXRow(item);
         } else if (item.입력유형 === '숫자') {
-          html += `</div><div class="fg"><label>${item.항목명}${item.단위?' ('+item.단위+')':''}</label>
-            <input type="text" id="item_${item.항목ID}" inputmode="decimal" oninput="handleSmartInput(this)"></div><div class="ox-table">`;
+          html += `</div><div class="fg"><label>${escT_(item.항목명)}${item.단위?' ('+escT_(item.단위)+')':''}</label>
+            <input type="text" id="item_${escAttr(item.항목ID)}" inputmode="decimal" oninput="handleSmartInput(this)"></div><div class="ox-table">`;
         } else if (item.입력유형 === '선택') {
-          html += `</div><div class="fg"><label>${item.항목명}</label>
-            <select id="item_${item.항목ID}">${item.선택지.map(o=>`<option>${o}</option>`).join('')}</select>
+          html += `</div><div class="fg"><label>${escT_(item.항목명)}</label>
+            <select id="item_${escAttr(item.항목ID)}">${(item.선택지||[]).map(o=>`<option>${escT_(o)}</option>`).join('')}</select>
           </div><div class="ox-table">`;
         } else {
-          html += `</div><div class="fg"><label>${item.항목명}</label>
-            <textarea id="item_${item.항목ID}"></textarea></div><div class="ox-table">`;
+          html += `</div><div class="fg"><label>${escT_(item.항목명)}</label>
+            <textarea id="item_${escAttr(item.항목ID)}"></textarea></div><div class="ox-table">`;
         }
       });
       html += `</div>`;
@@ -2708,38 +2928,56 @@ function addSitePhoto() {
 }
 
 async function previewSitePhotos(files) {
-  const grid = document.getElementById('sitePhotoGrid');
-  if (!grid || !files || !files.length) return;
-
+  if (!files || !files.length) return;
   toast(`사진 처리 중... (${files.length}장)`);
-  let saved = 0, before = 0, after = 0;
+  // 화면(DOM)이 아니라 S.photoMap['site_extra'] 에 담고, 그리드는 상태에서 다시 그립니다 (2026-09-06 · A-1)
+  const r = await appendPhotos_('site_extra', '추가사진', files);
+  renderPhotoGrid_('site_extra');
 
-  for (const file of files) {
-    const b64 = await compressImage(file);
-    if (!b64) continue;
-    before += file.size;
-    after  += dataUrlBytes(b64);
-
-    const div = document.createElement('div');
-    div.className = 'photo-thumb';
-    div.dataset.base64 = b64;
-    div.dataset.filename = file.name;
-    div.dataset.type = 'site';
-    const img = document.createElement('img');
-    img.src = b64;
-    const del = document.createElement('button');
-    del.className = 'del-btn';
-    del.textContent = '×';
-    del.onclick = function() { div.remove(); };
-    div.appendChild(img);
-    div.appendChild(del);
-    grid.appendChild(div);
-    saved++;
-  }
-
-  if (saved === 0) { toast('사진을 읽지 못했습니다. 다시 시도해 주세요.'); return; }
-  toast(`📷 추가사진 ${saved}장 · ${fmtSize(before)} → ${fmtSize(after)}`);
+  if (r.saved === 0) { toast('사진을 읽지 못했습니다. 다시 시도해 주세요.'); return; }
+  toast(`📷 추가사진 ${r.saved}장 · ${fmtSize(r.before)} → ${fmtSize(r.after)}`);
 }
+
+/* ── 추가사진·열화상 그리드 — S.photoMap 에서 그립니다 (2026-09-06 · A-1) ──────
+   키 ↔ 화면 요소. 그리드는 renderInspSection 이 다시 그릴 때마다 새로 만들어지므로
+   상태(S.photoMap)에서 다시 채워야 사진이 남습니다. 삭제(×)도 상태를 고친 뒤 다시 그립니다. */
+const PHOTO_GRID_IDS = { site_extra: 'sitePhotoGrid', thermal: 'thermalGrid' };
+
+function renderPhotoGridHtml_(key) {
+  const list = (S.photoMap && S.photoMap[key]) || [];
+  return list.map((ph, i) =>
+      '<div class="photo-thumb">'
+    + '<img src="' + escAttr(ph.base64 || '') + '" alt="">'
+    + '<button type="button" class="del-btn" data-photo-key="' + escAttr(key) + '" data-photo-idx="' + i + '" title="삭제">×</button>'
+    + '</div>').join('');
+}
+
+function renderPhotoGrid_(key) {
+  const el = document.getElementById(PHOTO_GRID_IDS[key] || '');
+  if (el) el.innerHTML = renderPhotoGridHtml_(key);
+}
+
+function renderAllPhotoGrids_() {
+  Object.keys(PHOTO_GRID_IDS).forEach(renderPhotoGrid_);
+}
+
+function removeMapPhoto_(key, idx) {
+  const list = S.photoMap && S.photoMap[key];
+  if (!list || idx < 0 || idx >= list.length) return;
+  list.splice(idx, 1);
+  if (!list.length) delete S.photoMap[key];
+  renderPhotoGrid_(key);
+  if (typeof saveDraftNow === 'function') saveDraftNow();   // 지운 것도 바로 임시저장에 반영
+}
+
+// 삭제 버튼은 위임 처리 — 그리드가 몇 번 다시 그려져도 핸들러가 살아 있습니다
+document.addEventListener('click', function (e) {
+  const btn = e.target && e.target.closest && e.target.closest('.photo-thumb .del-btn[data-photo-key]');
+  if (!btn) return;
+  e.preventDefault();
+  removeMapPhoto_(btn.dataset.photoKey, Number(btn.dataset.photoIdx));
+});
+
 function renderActionSection(wrap) {
   const div = document.createElement('div');
   div.innerHTML = `
@@ -2749,7 +2987,7 @@ function renderActionSection(wrap) {
            background:#f8fafc;font-size:.9rem;cursor:pointer;text-align:center;margin-bottom:.5rem;">
     📷 사진 추가
   </button>
-  <div class="photo-grid" id="sitePhotoGrid"></div>
+  <div class="photo-grid" id="sitePhotoGrid">${renderPhotoGridHtml_('site_extra')}</div>
 
   <div class="sec-title">🔧 조치사항</div>
   <div class="fg"><label>종합 점검결과 *</label>
@@ -2782,8 +3020,7 @@ function addThermalPhoto() {
 }
 
 async function previewThermal(files) {
-  const grid = document.getElementById('thermalGrid');
-  if (!grid || !files || !files.length) return;
+  if (!files || !files.length) return;
 
   // 촬영일시 자동 입력 — ⚠️ 압축 전 '원본' 파일에서 EXIF를 읽어야 합니다.
   //    압축하면 EXIF가 사라지므로 순서가 중요합니다.
@@ -2797,33 +3034,18 @@ async function previewThermal(files) {
         const d = new Date(firstFile.lastModified);
         dtEl.value = toDatetimeLocal(d);
       }
+      // 코드로 채운 값은 input 이벤트가 안 나서 임시저장이 안 잡습니다 — 직접 예약 (2026-09-06)
+      if (typeof scheduleDraftSave === 'function') scheduleDraftSave();
     });
   }
 
   toast(`사진 처리 중... (${files.length}장)`);
-  let saved = 0, before = 0, after = 0;
+  // 열화상도 S.photoMap['thermal'] 에 담습니다 — 예전에는 썸네일에만 있어 제출·임시저장 어디에도 안 담겼습니다 (2026-09-06 · A-1)
+  const r = await appendPhotos_('thermal', '열화상 촬영', files);
+  renderPhotoGrid_('thermal');
 
-  for (const file of files) {
-    const b64 = await compressImage(file);
-    if (!b64) continue;
-    before += file.size;
-    after  += dataUrlBytes(b64);
-
-    const div = document.createElement('div');
-    div.className = 'photo-thumb';
-    const img = document.createElement('img');
-    img.src = b64;
-    const del = document.createElement('button');
-    del.className = 'del-btn';
-    del.textContent = '×';
-    del.onclick = function() { div.remove(); };
-    div.appendChild(img);
-    div.appendChild(del);
-    grid.appendChild(div);
-    saved++;
-  }
-
-  if (saved > 0) toast(`🌡 열화상 ${saved}장 · ${fmtSize(before)} → ${fmtSize(after)}`);
+  if (r.saved === 0) { toast('사진을 읽지 못했습니다. 다시 시도해 주세요.'); return; }
+  toast(`🌡 열화상 ${r.saved}장 · ${fmtSize(r.before)} → ${fmtSize(r.after)}`);
 }
 
 
@@ -2908,7 +3130,7 @@ let currentInspType = '월차점검';
 </script>
 <script>
 function getCheckItemLabel(itemId) {
-  if (itemId === 'site_photos' || itemId === 'extra') return '추가사진';
+  if (itemId === 'site_photos' || itemId === 'site_extra' || itemId === 'extra') return '추가사진';
   if (itemId === 'thermal_photos' || itemId === 'thermal') return '열화상 촬영';
   if (itemId.startsWith('ch_')) return '채널별 전류';
   const el = document.getElementById(itemId) || document.getElementById(`item_${itemId}`);
@@ -2957,7 +3179,8 @@ async function restoreOfflineQueueForSite(no) {
 function prefetchCheckItems(site) {
   if (!site) return;
   if (!S.checkItemsCache) S.checkItemsCache = {};
-  const typesToPrefetch = ['월차점검', '기록', '측정', '긴급출동'];
+  // '' 는 전체 목록 — buildForm 이 「기본」칸·아코디언 표시 여부에 씁니다. 분기·반기도 함께 (2026-09-06 · A-9)
+  const typesToPrefetch = ['', '월차점검', '기록', '측정', '열화상촬영', '분기점검', '반기점검', '긴급출동'];
   typesToPrefetch.forEach(ty => {
     const cacheKey = `${site.설비구분 || ''}_${ty}_${site.측정프로필 || ''}`;
     if (!S.checkItemsCache[cacheKey]) {
@@ -2993,8 +3216,11 @@ async function selectInspType(t) {
   for (const ty of S.inspTypes) {
     const cacheKey = `${site?.설비구분||''}_${ty}_${site?.측정프로필||''}`;
     if (!S.checkItemsCache[cacheKey]) {
-      const items = await fetchCheckItems(site, ty);
-      S.checkItemsCache[cacheKey] = items || [];
+      /* 받아둔 것이 있으면 그걸로 바로 그리고 서버 값은 뒤에서 갱신 (2026-09-06 · A-11)
+         예전에는 아코디언을 탭할 때마다 서버 응답을 기다려 느린 현장에서 수십 초 멈췄습니다. */
+      const fast = await fetchCheckItemsFast_(site, ty);
+      S.checkItemsCache[cacheKey] = fast.items || [];
+      if (fast.refresh) fast.refresh.then(n => { if (Array.isArray(n) && n.length) S.checkItemsCache[cacheKey] = n; });
     }
     const items = S.checkItemsCache[cacheKey];
     if (items?.length) allItems = allItems.concat(items);
@@ -3042,7 +3268,7 @@ function renderOXRow(item) {
     ? `<button type="button" class="ox-btn na" onclick="setOX('item_${id}','/')" title="해당 설비 없음">/</button>` : '';
 
   return `<div class="ox-row" id="row_item_${id}">
-    <div class="ox-name"><span>${item.항목명}</span>${badge}</div>
+    <div class="ox-name"><span>${escT_(item.항목명)}</span>${badge}</div>
     <div class="ox-cam">
       <div class="ox-grp">
         <button type="button" class="ox-btn o" onclick="setOX('item_${id}','O')">O</button>
@@ -3175,25 +3401,44 @@ function takeItemPhotoMulti(itemId, label, minCount) {
 function openPhotoInput(itemId, label, minCount, multiple) {
   openImagePicker(multiple, async (files) => {
     if (!files.length) return;
-    if (!S.photoMap[itemId]) S.photoMap[itemId] = [];
-
     toast(`사진 처리 중... (${files.length}장)`);
-    let saved = 0, before = 0, after = 0;
-    for (const f of files) {
-      const b64 = await compressImage(f);
-      if (!b64) continue;
-      before += f.size;
-      after  += dataUrlBytes(b64);
-      S.photoMap[itemId].push({ base64: b64, filename: f.name, label: label });
-      saved++;
-    }
+    const r = await appendPhotos_(itemId, label, files);
     updatePhotoCount(itemId, minCount);
 
-    if (saved === 0) { toast('사진을 읽지 못했습니다. 다시 시도해 주세요.'); return; }
-    toast(`📷 ${label} ${saved}장 추가 · ${fmtSize(before)} → ${fmtSize(after)}`);
-    // 사진은 용량이 커서 유실 시 손해가 큽니다 — 디바운스 없이 바로 저장
-    if (typeof saveDraftNow === 'function') saveDraftNow();
+    if (r.saved === 0) { toast('사진을 읽지 못했습니다. 다시 시도해 주세요.'); return; }
+    toast(`📷 ${label} ${r.saved}장 추가 · ${fmtSize(r.before)} → ${fmtSize(r.after)}`);
   });
+}
+
+/* ── 사진을 S.photoMap 에 담는 공용 루틴 (2026-09-06 · A-1) ─────────────
+   예전에는 사진이 세 곳에 따로 살았습니다.
+     · 항목별 사진  → S.photoMap
+     · 추가사진     → #sitePhotoGrid 썸네일의 dataset 에만
+     · 열화상       → #thermalGrid 썸네일에만 (base64 도 안 남김)
+   아코디언을 탭하면 renderInspSection 이 wrap.innerHTML 을 통째로 다시 그리는데,
+   그 순간 추가사진·열화상 그리드가 사라졌습니다. 임시저장에도 안 담겼고,
+   제출 시 수집 경로도 셋이 달라 열화상은 서버로 아예 올라가지 않았습니다.
+   이제 모든 사진은 S.photoMap[키] = [{base64, filename, label}] 한 곳에만 둡니다.
+     · 항목별  : 'item_<항목ID>'
+     · 추가사진 : 'site_extra'
+     · 열화상  : 'thermal'   (서버 uploadPhoto 는 /thermal/i 키를 열화상 폴더로 보냅니다)
+   화면 그리드는 이 상태에서 다시 그리므로(renderPhotoGrid_) 재렌더링에도 살아남습니다.
+   @return {{saved:number, before:number, after:number}} 담은 장수 · 원본/압축 바이트 */
+async function appendPhotos_(itemId, label, files) {
+  if (!S.photoMap) S.photoMap = {};
+  if (!S.photoMap[itemId]) S.photoMap[itemId] = [];
+  let saved = 0, before = 0, after = 0;
+  for (const f of (files || [])) {
+    const b64 = await compressImage(f);
+    if (!b64) continue;
+    before += f.size;
+    after  += dataUrlBytes(b64);
+    S.photoMap[itemId].push({ base64: b64, filename: f.name, label: label });
+    saved++;
+  }
+  // 사진은 용량이 커서 유실 시 손해가 큽니다 — 디바운스 없이 바로 저장
+  if (saved > 0 && typeof saveDraftNow === 'function') saveDraftNow();
+  return { saved, before, after };
 }
 
 function updatePhotoCount(itemId, minCount) {
@@ -3303,13 +3548,50 @@ function autoFillPrevPower() {
   }
 }
 
+/* 점검일자의 달 ('yyyy-MM') — 회차 계산 기준 달 */
+function seqYm_() {
+  const v = document.getElementById('f_date')?.value || '';
+  if (/^\d{4}-\d{2}/.test(v)) return v.slice(0, 7);
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+/**
+ * 대기함(submitQ)에 있는 같은 발전소·같은 달 점검 수 (2026-09-06 · A-10)
+ *  오프라인으로 두 번째 점검을 하면 첫 건은 아직 서버에 없어 S.siteInspections 에 안 잡히고,
+ *  회차가 다시 1회차로 계산됐습니다. 대기함도 「이미 한 점검」으로 셉니다.
+ *  서버 목록에 이미 있는 건(submittedId 일치)은 두 번 세지 않습니다.
+ */
+async function countQueuedInspections_(no, ym) {
+  try {
+    const items = await listStore(IDB_SUBMIT);
+    const serverIds = {};
+    (S.siteInspections || []).forEach(it => { if (it && it.inspId) serverIds[it.inspId] = true; });
+    return items.filter(it => {
+      const p = it && it.payload, d = p && p.data;
+      if (!d || String(d.no) !== String(no)) return false;
+      if (p.submittedId && serverIds[p.submittedId]) return false;
+      return String(d.점검일자 || '').slice(0, 7) === ym;
+    }).length;
+  } catch (_) { return 0; }
+}
+
 async function calcSeq() {
   const site = S.currentSite;
   const el = document.getElementById('f_seq');
   if (!site || !el) return;
 
   const total = Number(site.점검회차) || 1;
-  const done  = (S.siteInspections || []).length;
+  /* 서버 목록(이번 달) + 대기함(같은 달) — 다른 달 기록은 세지 않습니다 (A-10) */
+  const ym = seqYm_();
+  const serverDone = (S.siteInspections || [])
+    .filter(it => !it.점검일자 || String(it.점검일자).slice(0, 7) === ym).length;
+  const queued = S.editing ? 0 : await countQueuedInspections_(site.no, ym);
+  // 기다리는 사이 다른 발전소를 열었거나 폼을 다시 그렸으면 새 칸을 다시 찾습니다
+  if (S.currentSite !== site) return;
+  const seqEl = document.getElementById('f_seq');
+  if (!seqEl) return;
+  const done = serverDone + queued;
 
   // 수정 모드면 원래 값을, 신규면 다음 회차를 기본 선택
   let want = '';
@@ -3327,9 +3609,9 @@ async function calcSeq() {
   }
   // 이력에 없던 형식이면(과거 데이터 등) 그 값도 선택지에 넣어 유실 방지
   if (want && html.indexOf(`value="${want}"`) < 0) {
-    html = `<option value="${want}" selected>${want}</option>` + html;
+    html = `<option value="${escAttr(want)}" selected>${escT_(want)}</option>` + html;
   }
-  el.innerHTML = html;
+  seqEl.innerHTML = html;
 }
 // ===== 개발자(테스트) 전용 난수 자동입력 =====
 /**
@@ -3659,22 +3941,41 @@ async function submitForm() {
   }
 }
 
-// S.photoMap 에 담긴 사진을 업로드용 배열로 변환
-function collectPhotoPayload(d) {
+/**
+ * S.photoMap 의 【모든】 사진을 업로드용 배열로 — 유일한 수집기 (2026-09-06 · A-3)
+ *  항목별('item_*')·추가사진('site_extra')·열화상('thermal')이 전부 S.photoMap 에 있으므로
+ *  여기 한 곳만 돌면 됩니다. 대기함 저장(saveInspectionToOfflineQueue)과
+ *  수정 저장(submitEdit)이 같은 함수를 씁니다.
+ *  ⚠️ 예전에는 두 곳이 각자 모았습니다 — 대기함은 S.photoMap + 화면 썸네일 긁기,
+ *     수정은 S.photoMap 만. 열화상 썸네일은 base64 가 없어 어느 쪽에도 안 잡혔습니다.
+ *
+ *  photoType(서버 폴더 분기):
+ *    · 키가 thermal 인 사진 → '열화상촬영' (2.열화상점검 폴더)
+ *    · 열화상촬영【만】 선택한 방문이면 추가사진도 열화상으로 봅니다
+ *    ⚠️ 예전에는 열화상 아코디언이 펼쳐져 있기만 하면 월차점검 인버터 사진까지
+ *       열화상 폴더로 들어갔습니다. 이제 키 기준입니다.
+ */
+function collectAllPhotos_(d) {
   const out = [];
   const site = S.currentSite || {};
-  const isThermal = (S.inspTypes || []).indexOf('열화상촬영') >= 0;
+  const siteNo   = (d && d.no) || site.no || '';
+  const siteName = (d && d.설비명칭) || site.name || '미지정';
+  const uploader = (d && d.점검자) || S.user?.name || '';
+  const types = S.inspTypes || [];
+  const thermalOnly = types.length > 0 && types.every(t => t === '열화상촬영');
   Object.entries(S.photoMap || {}).forEach(([itemId, list]) => {
     (list || []).forEach(ph => {
+      if (!ph || !ph.base64) return;
+      const isThermal = /thermal/i.test(itemId) || thermalOnly;
       out.push({
         base64: ph.base64,
         filename: ph.filename || `photo_${Date.now()}.jpg`,
-        no: d.no || site.no || '',
-        설비명칭: d.설비명칭 || site.name || '미지정',
+        no: siteNo,
+        설비명칭: siteName,
         itemId: itemId,
         itemName: ph.label || getCheckItemLabel(itemId),
-        uploader: d.점검자 || S.user?.name || '',
-        photoType: (/thermal/i.test(itemId) || isThermal) ? '열화상촬영' : ''
+        uploader: uploader,
+        photoType: isThermal ? '열화상촬영' : ''
       });
     });
   });
@@ -3695,9 +3996,9 @@ async function submitEdit(d) {
     const r = await api('updateInspection', d);
     if (!r || !r.success) { showSubmitFailBox(r); return; }
 
-    // 새로 추가한 사진만 업로드
+    // 새로 추가한 사진만 업로드 (항목별·추가사진·열화상 모두 — A-3)
     let pOk = 0, pFail = 0;
-    const photos = collectPhotoPayload(d);
+    const photos = collectAllPhotos_(d);
     if (photos.length) {
       setSubmitBusy(true, `사진 ${photos.length}장 업로드 중...`);
       for (const ph of photos) {
@@ -3712,8 +4013,18 @@ async function submitEdit(d) {
     if (pFail > 0) msg += ` · ⚠️ ${pFail}장 실패`;
     toast(msg, 5000);
 
+    /* 제출(submitForm)과 같은 뒷정리 (2026-09-06 · A-7)
+       예전에는 S.editing 만 지우고 모달을 닫았습니다. 그 뒤 앱이 백그라운드로 가면
+       saveDraftNow 가 「수정 모드 아님 + 폼에 내용 있음」으로 보고 방금 저장한 수정 내용을
+       새 초안으로 남겨, 다음에 발전소를 열면 「작성 중이던 점검」이 되살아났습니다. */
+    S.draftOff = true;
+    if (typeof _draftTimer !== 'undefined' && _draftTimer) clearTimeout(_draftTimer);
     S.editing = null;
     S.photoMap = {};
+    const formEl = document.getElementById('formEl');
+    if (formEl) formEl.innerHTML = '';
+    currentInspType = '월차점검';
+    S.inspTypes = ['월차점검'];
     closeModal();
   } catch (err) {
     console.warn('수정 저장 오류:', err);
@@ -3777,68 +4088,13 @@ async function retrySubmit() {
 }
 
 async function saveInspectionToOfflineQueue(d) {
-  const photos = [];
-  const site = S.currentSite || {};
-  const siteName = d.설비명칭 || site.name || '미지정';
-  const siteNo = d.no || site.no || '';
-  const uploaderName = d.점검자 || S.user?.name || '';
-  const isThermal = (S.inspTypes || []).indexOf('열화상촬영') >= 0;
+  /* 사진은 S.photoMap 한 곳에서만 모읍니다 (2026-09-06 · A-1/A-3)
+     추가사진·열화상도 S.photoMap 에 들어가므로 화면 썸네일을 긁던 R-1 경로는 지웠습니다. */
+  const photos = collectAllPhotos_(d);
 
-  if (S.photoMap) {
-    Object.entries(S.photoMap).forEach(([itemId, list]) => {
-      (list || []).forEach(ph => {
-        const isItemThermal = /thermal/i.test(itemId) || isThermal;
-        const labelStr = ph.label || getCheckItemLabel(itemId);
-        photos.push({
-          base64: ph.base64,
-          filename: ph.filename || `photo_${Date.now()}.jpg`,
-          no: siteNo,
-          설비명칭: siteName,
-          itemId: itemId,
-          itemName: labelStr,
-          uploader: uploaderName,
-          photoType: isItemThermal ? '열화상촬영' : ''
-        });
-      });
-    });
-  }
-
-  /* ★ 추가사진(썸네일)도 함께 담습니다 (2026-09-04 · R-1)
-     previewSitePhotos()는 사진을 화면의 .photo-thumb dataset 에만 두는데,
-     예전 리팩토링(H-11/H-12) 때 이걸 수집하는 경로가 끊겨
-     추가사진이 화면에만 보이고 서버로는 전혀 안 올라가고 있었습니다. */
-  document.querySelectorAll('.photo-thumb').forEach(div => {
-    const b64 = div.dataset && div.dataset.base64;
-    if (!b64) return;
-    photos.push({
-      base64: b64,
-      filename: div.dataset.filename || `photo_${Date.now()}.jpg`,
-      no: siteNo,
-      설비명칭: siteName,
-      itemId: div.dataset.type === 'site' ? 'site_photos' : (div.dataset.itemId || 'extra'),
-      itemName: '추가사진',
-      uploader: uploaderName,
-      photoType: isThermal ? '열화상촬영' : ''
-    });
-  });
-
-  // 중복 저장 방지: 해당 발전소(d.no)의 기존 대기 기록 청소 후 최신 1건 유지
-  try {
-    const items = (await withIdb(db => new Promise(res => {
-      const req = db.transaction(IDB_SUBMIT, 'readonly').objectStore(IDB_SUBMIT).getAll();
-      req.onsuccess = () => res(req.result || []);
-      req.onerror = () => res([]);
-    }))) || [];
-    const sameSiteItems = items.filter(it => it.payload?.data?.no == d.no);
-    if (sameSiteItems.length > 0) {
-      await withIdb(db => new Promise(res => {
-        const tx = db.transaction(IDB_SUBMIT, 'readwrite');
-        const store = tx.objectStore(IDB_SUBMIT);
-        sameSiteItems.forEach(it => store.delete(it.id));
-        tx.oncomplete = res; tx.onerror = res;
-      }));
-    }
-  } catch(e) { console.warn('대기함 중복 정제 실패', e); }
+  /* ⚠️ 같은 발전소의 기존 대기 건을 지우던 「중복 정제」를 없앴습니다 (2026-09-06 · A-2)
+     같은 날 월차점검 뒤 긴급출동을 제출하면 앞 건이 통째로 사라졌고, 점검은 서버에 기록됐는데
+     사진만 남은(submittedId) 건도 지워져 사진이 유실됐습니다. 서버가 제출키로 중복을 막습니다. */
 
   /* ★ 제출키 — 같은 점검이 서버에 두 번 들어가는 것을 막습니다 (2026-08-23)
      휴대폰이 응답을 못 받아 다시 보내도, 서버가 이 키를 보고 「이미 받은 것」임을 압니다.
@@ -3888,14 +4144,34 @@ async function flushQueue() {
     req.onerror = () => res([]);
   }))) || [];
   if (!items.length) return toast('대기 사진 없음');
-  const r = await api('flushPhotoQueue', {queue: items});
-  await withIdb(db => new Promise(res => {
-    const tx = db.transaction(IDB_STORE,'readwrite');
-    items.forEach(i => tx.objectStore(IDB_STORE).delete(i.id));
-    tx.oncomplete = res; tx.onerror = res;
-  }));
-  document.getElementById('queueBar').classList.remove('show');
-  toast(`✅ ${r?.uploaded||items.length}장 업로드 완료`);
+
+  /* 서버 flushPhotoQueue 는 한 번에 최대 8장만 처리하고 {uploaded, failed, remaining} 을 돌려줍니다
+     (2026-09-06 — Apps Script 6분 제한 대비). 8장씩 끊어 보내고 remaining 이 0 이 될 때까지 돕니다.
+     처리된(성공·실패 모두 서버가 시도한) 것만 큐에서 지우고, 응답이 없으면 남겨 다음에 다시 보냅니다. */
+  const BATCH = 8;
+  let uploaded = 0, failed = 0, rest = items.slice(), guard = 0;
+  while (rest.length && guard++ < 200) {
+    const batch = rest.slice(0, BATCH);
+    const r = await api('flushPhotoQueue', {queue: batch});
+    if (!r) { toast(`⚠️ 통신이 끊겼습니다 — ${rest.length}장은 다음에 다시 올립니다`, 5000); break; }
+    uploaded += Number(r.uploaded) || 0;
+    failed   += Number(r.failed)   || 0;
+    // 서버가 몇 장을 처리했는지 — 옛 서버(uploaded 만 있음)와도 맞물리게 계산합니다
+    const processed = Math.min(batch.length,
+      (typeof r.remaining === 'number') ? Math.max(0, batch.length - r.remaining) : batch.length);
+    const done = batch.slice(0, processed);
+    await withIdb(db => new Promise(res => {
+      const tx = db.transaction(IDB_STORE,'readwrite');
+      done.forEach(i => tx.objectStore(IDB_STORE).delete(i.id));
+      tx.oncomplete = res; tx.onerror = res;
+    }));
+    rest = rest.slice(processed);
+    if (!processed) break;   // 서버가 하나도 못 처리했으면 헛돌지 않게
+  }
+  await checkQueue();
+  toast(failed
+    ? `⚠️ ${uploaded}장 업로드 · ${failed}장 실패`
+    : `✅ ${uploaded}장 업로드 완료`, failed ? 5000 : 3000);
 }
 function switchTab(name) {
   ['list','mine','admin'].forEach(t => {
@@ -3937,8 +4213,8 @@ async function loadMineSummary() {
   el.innerHTML = device + rows.map(s => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:.6rem .2rem;border-bottom:1px solid var(--border);font-size:.88rem;">
       <div>
-        <div style="font-weight:600;">${s.name}</div>
-        <div style="font-size:.78rem;color:var(--muted);">${s.lastDate ? '최근 '+fmtDay(s.lastDate) : '이번 달 점검 없음'}</div>
+        <div style="font-weight:600;">${escT_(s.name)}</div>
+        <div style="font-size:.78rem;color:var(--muted);">${s.lastDate ? '최근 '+escT_(fmtDay(s.lastDate)) : '이번 달 점검 없음'}</div>
       </div>
       <span class="badge" style="background:${s.missing>0?'#fee2e2':'#dcfce7'};color:${s.missing>0?'#991b1b':'#166534'};">
         ${s.done}/${s.required}회
@@ -3997,10 +4273,10 @@ async function renderDeviceStatus() {
     html += '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:.55rem .7rem;margin-bottom:.5rem;">'
           + `<div style="color:#b45309;font-weight:700;">⏳ 전송 대기 ${pending.length}건</div>`
           + '<div style="font-size:.8rem;color:#78350f;margin-top:.2rem;line-height:1.5;">'
-          + pending.map(p => `· ${p.payload?.data?.설비명칭 || '(이름없음)'} <span style="color:var(--muted);">${fmtWhen(p.createdAt)}</span>`).join('<br>')
+          + pending.map(p => `· ${escT_(p.payload?.data?.설비명칭 || '(이름없음)')} <span style="color:var(--muted);">${fmtWhen(p.createdAt)}</span>`).join('<br>')
           + '</div>'
           + (S.lastFlushError
-              ? `<div style="font-size:.78rem;color:var(--ng);margin-top:.35rem;">✕ 마지막 시도 : ${esc(S.lastFlushError)}</div>`
+              ? `<div style="font-size:.78rem;color:var(--ng);margin-top:.35rem;">✕ 마지막 시도 : ${escT_(S.lastFlushError)}</div>`
               : '')
           /* ⚠️ 여기에 「비우기」 버튼을 두지 마세요 (2026-08-23 결정).
                 현장에서는 서버에 들어갔는지 확인할 방법이 없습니다.
@@ -4016,7 +4292,7 @@ async function renderDeviceStatus() {
           + '<div style="font-size:.8rem;margin-top:.2rem;line-height:1.7;">'
           + drafts.map(d => {
               const cnt = Object.keys(d.photos || {}).reduce((a, k) => a + (d.photos[k] || []).length, 0);
-              return `· <a href="javascript:void(0)" onclick="openSite('${d.no}')" style="color:#1d4ed8;font-weight:600;">${d.설비명칭 || d.no}</a>`
+              return `· <a href="javascript:void(0)" onclick="openSite('${escAttr(d.no)}')" style="color:#1d4ed8;font-weight:600;">${escT_(d.설비명칭 || d.no)}</a>`
                    + ` <span style="color:var(--muted);">${fmtWhen(d.savedAt)}${cnt ? ' · 사진 ' + cnt + '장' : ''}</span>`;
             }).join('<br>')
           + '</div></div>';
@@ -4188,7 +4464,7 @@ async function loadAdminSummary() {
     html += `<div style="border:1.5px solid var(--border);border-radius:10px;margin-bottom:.5rem;overflow:hidden;">
       <div onclick="toggleMgr(${gi})" style="padding:.65rem .8rem;cursor:pointer;background:#f8fafc;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-weight:700;font-size:.92rem;">${mgr}</span>
+          <span style="font-weight:700;font-size:.92rem;">${escT_(mgr)}</span>
           <span style="font-size:.82rem;">
             <b style="color:${left ? 'var(--ng)' : 'var(--ok)'};">${done}</b>/${g.length}개소
             <span id="mgrArrow_${gi}" style="color:var(--muted);margin-left:.3rem;">▼</span>
@@ -4210,9 +4486,9 @@ async function loadAdminSummary() {
       html += `<div style="display:flex;justify-content:space-between;align-items:center;
                     padding:.45rem .1rem;border-bottom:1px solid #f1f5f9;font-size:.85rem;">
           <div style="min-width:0;">
-            <div style="font-weight:600;">${s.name}</div>
+            <div style="font-weight:600;">${escT_(s.name)}</div>
             <div style="font-size:.74rem;color:var(--muted);">
-              ${s.lastDate || '미점검'}${ng ? ` · <span style="color:var(--ng);">이상 ${ng}</span>` : ''}
+              ${escT_(s.lastDate || '미점검')}${ng ? ` · <span style="color:var(--ng);">이상 ${ng}</span>` : ''}
             </div>
           </div>
           <span class="badge" style="background:${s.missing > 0 ? '#fee2e2' : '#dcfce7'};color:${s.missing > 0 ? '#991b1b' : '#166534'};">
@@ -4360,7 +4636,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '20260904-1030';
+  var BUILD = '11eddbe2';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
