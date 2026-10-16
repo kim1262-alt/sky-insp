@@ -2588,6 +2588,39 @@ function renderInspSection(inspTypeOrTypes, site, equip, isLow, isSub, sections)
   wrap.innerHTML = out;
   renderActionSection(wrap);
 
+  // ── [+ 추가]로 늘려둔 호기 칸 되살리기 (2026-10-06) ──
+  //  buildSectionHtml 은 3상·숫자반복 항목을 언제나 1호기 칸만 그립니다.
+  //  그래서 아코디언을 다시 탭하면 2호기 이상 칸이 사라지고, 바로 아래 복원 단계의
+  //  `if (!el) return` 에서 그 값이 조용히 버려졌습니다.
+  //  → 값을 되돌리기 전에, 찍어둔 칸ID의 호기 번호만큼 칸을 먼저 늘려둡니다.
+  //    (불러오기 경로 fillForm 에 이미 있는 처리와 같은 방식입니다)
+  const needN = {};                       // { 항목ID: 필요한 호기수 }
+  Object.keys(saved).forEach(id => {
+    const m = id.match(/^item_(.+)_(\d+)$/);
+    if (!m) return;
+    const n = parseInt(m[2], 10);
+    if (!n) return;
+    needN[m[1]] = Math.max(needN[m[1]] || 1, n);
+  });
+  Object.keys(needN).forEach(base => {
+    const n = needN[base];
+    const ph = document.getElementById('ph_wrap_' + base);
+    if (ph && typeof renderPhaseSet === 'function') {
+      while (ph.querySelectorAll('.ph-set').length < n) {
+        const next = ph.querySelectorAll('.ph-set').length + 1;
+        ph.insertAdjacentHTML('beforeend', renderPhaseSet(base, next, ''));
+      }
+      return;
+    }
+    const nu = document.getElementById('num_wrap_' + base);
+    if (nu && typeof renderNumSet === 'function') {
+      while (nu.querySelectorAll('.num-set').length < n) {
+        const next = nu.querySelectorAll('.num-set').length + 1;
+        nu.insertAdjacentHTML('beforeend', renderNumSet(base, next, ''));
+      }
+    }
+  });
+
   // ── 입력값 복원 (O/X hidden 값은 버튼 하이라이트도 복원) ──
   Object.entries(saved).forEach(([id, val]) => {
     const el = document.getElementById(id);
@@ -4636,7 +4669,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '11eddbe2';
+  var BUILD = 'e6458e36';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
