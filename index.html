@@ -2840,45 +2840,45 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
     <div style="font-size:.83rem;font-weight:700;color:var(--muted);margin:.75rem 0 .3rem;">전력 / 역률 / 주파수</div>
     <div class="row3">
       <div class="fg"><label>유효전력(kW)</label>
-        <input type="text" id="item_active_pw" inputmode="decimal" placeholder="kW" oninput="handleSmartInput(this)">
+        <input type="text" id="item_R_ACTIVE" inputmode="decimal" placeholder="kW" oninput="handleSmartInput(this)">
       </div>
       <div class="fg"><label>무효전력(kVar)</label>
-        <input type="text" id="item_reactive_pw" inputmode="decimal" placeholder="kVar" oninput="handleSmartInput(this)">
+        <input type="text" id="item_R_Var" inputmode="decimal" placeholder="kVar" oninput="handleSmartInput(this)">
       </div>
       <div class="fg"><label>피상전력(kVA)</label>
-        <input type="text" id="item_apparent_pw" inputmode="decimal" placeholder="kVA" oninput="handleSmartInput(this)">
+        <input type="text" id="item_R_kVA" inputmode="decimal" placeholder="kVA" oninput="handleSmartInput(this)">
       </div>
     </div>
     <div class="row2">
       <div class="fg"><label>역률(%)</label>
-        <input type="text" id="item_pf" inputmode="decimal" placeholder="%" min="0" max="100" oninput="handleSmartInput(this)">
+        <input type="text" id="item_R_PF" inputmode="decimal" placeholder="%" min="0" max="100" oninput="handleSmartInput(this)">
       </div>
       <div class="fg"><label>주파수(Hz)</label>
-        <input type="text" id="item_freq" inputmode="decimal" placeholder="Hz" value="60.0" oninput="handleSmartInput(this)">
+        <input type="text" id="item_R_HZ" inputmode="decimal" placeholder="Hz" value="60.0" oninput="handleSmartInput(this)">
       </div>
     </div>`;
     if (!isLow) {
       html += `
       <div style="display:flex;justify-content:space-between;align-items:center;margin:.75rem 0 .3rem;">
         <span style="font-size:.83rem;font-weight:700;color:var(--muted);">VCB 전압 (V) <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
-        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('vcb_v','VCB 전압','V')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('vcb_v','VCB 전압')">− 제거</button>
+        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('R_VCB_V','VCB 전압','V')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('R_VCB_V','VCB 전압')">− 제거</button>
       </div>
-      <div id="ph_wrap_vcb_v">${renderPhaseSet('vcb_v', 1, 'V')}</div>
+      <div id="ph_wrap_R_VCB_V">${renderPhaseSet('R_VCB_V', 1, 'V')}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
         <span style="font-size:.83rem;font-weight:700;color:var(--muted);">VCB 전류 (A) <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
-        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('vcb_a','VCB 전류','A')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('vcb_a','VCB 전류')">− 제거</button>
+        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('R_VCB_A','VCB 전류','A')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('R_VCB_A','VCB 전류')">− 제거</button>
       </div>
-      <div id="ph_wrap_vcb_a">${renderPhaseSet('vcb_a', 1, 'A')}</div>
+      <div id="ph_wrap_R_VCB_A">${renderPhaseSet('R_VCB_A', 1, 'A')}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
         <span style="font-size:.83rem;font-weight:700;color:var(--muted);">ACB 전압 (V) <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
-        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('acb_v','ACB 전압','V')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('acb_v','ACB 전압')">− 제거</button>
+        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('R_ACB_V','ACB 전압','V')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('R_ACB_V','ACB 전압')">− 제거</button>
       </div>
-      <div id="ph_wrap_acb_v">${renderPhaseSet('acb_v', 1, 'V')}</div>
+      <div id="ph_wrap_R_ACB_V">${renderPhaseSet('R_ACB_V', 1, 'V')}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
         <span style="font-size:.83rem;font-weight:700;color:var(--muted);">ACB 전류 (A) <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
-        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('acb_a','ACB 전류','A')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('acb_a','ACB 전류')">− 제거</button>
+        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('R_ACB_A','ACB 전류','A')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('R_ACB_A','ACB 전류')">− 제거</button>
       </div>
-      <div id="ph_wrap_acb_a">${renderPhaseSet('acb_a', 1, 'A')}</div>`;
+      <div id="ph_wrap_R_ACB_A">${renderPhaseSet('R_ACB_A', 1, 'A')}</div>`;
     }
     return html;
   }
@@ -3337,26 +3337,26 @@ function renderDefaultCheckItems(inspType) {
   const type = inspType || '월차점검';
   const defaults = {
     '월차점검': [
-      {id:'mod_st',   name:'모듈(어레이) 및 구조물 상태확인',              type:'OX2',    minPhoto:2, photoLabel:'어레이·구조물 사진 2장 이상 필수'},
-      {id:'inv_st',   name:'인버터 정상가동 상태확인',                     type:'OX2',    minPhoto:1, photoLabel:'인버터별 사진 필수', photoPerInv:true},
-      {id:'elec_st',  name:'전기설비(배전반 및 전기실) 상태확인',          type:'OX2',    minPhoto:2, photoLabel:'전기실 사진 2장 이상 필수'},
-      {id:'relay_st', name:'보호계전기 상태 및 배선케이블 이상확인',       type:'OX2',    minPhoto:0, photoLabel:''},
-      {id:'jbox_st',  name:'접속반(내부상태 및 FUSE단락여부) 상태확인',   type:'OX2_NA', minPhoto:2, photoLabel:'접속반 사진 2장 이상 필수'},
-      {id:'site_st',  name:'부지상태(진입로/휀스/배수로/저류지 등) 확인', type:'OX2',    minPhoto:1, photoLabel:'진입로·휀스·배수로·저류지 각 사진 필수'},
-      {id:'weed_st',  name:'제초상태 확인',                                type:'OX2',    minPhoto:0, photoLabel:''},
+      /* 2026-10-17 — 항목ID 를 점검항목관리 정본 이름으로 맞췄습니다 (옛 mod_st · inv_st · elec_st · jbox_st · site_st · weed_st · relay_st).
+           옛 이름으로 저장되면 보고서 판정 토큰({{V_MODULE}} 등)이 못 읽었습니다. 지난 기록은 엔진이 읽을 때 정본으로 접습니다(foldColumnAliases_).
+           이 표는 「점검항목을 한 번도 못 받은 기기」 에서만 쓰입니다 — 평소에는 시트가 화면을 정합니다. */
+      {id:'V_MODULE',   name:'모듈 (파손·오염·음영·청결)',                         type:'OX2',    minPhoto:2, photoLabel:'모듈 사진 2장 이상'},
+      {id:'V_INVERTER', name:'인버터 (외관·결속·온도·팬·표시)',                    type:'OX2',    minPhoto:2, photoLabel:'인버터 사진 2장 이상', photoPerInv:true},
+      {id:'V_JBOX',     name:'접속함 (발열·단자대·차단기·센서)',                   type:'OX2_NA', minPhoto:2, photoLabel:'접속함 사진 2장 이상'},
+      {id:'V_STRUCT',   name:'구조물 (변형·체결·기초·부식)',                       type:'OX2',    minPhoto:2, photoLabel:'구조물 사진 2장 이상'},
+      {id:'V_PANEL',    name:'수배전반/전기실 (외함·배선·과열·풀림·환기·이상음·표시)', type:'OX2_NA', minPhoto:2, photoLabel:'수배전반 사진 2장 이상'},
+      {id:'V_WEED',     name:'부지상태 (제초상태·배수로·저류지·휀스 등)',          type:'OX2',    minPhoto:2, photoLabel:'부지 사진 2장 이상'},
     ],
     '측정': [
-      {id:'active_pw',   name:'유효전력(kW)',   type:'숫자', unit:'kW'},
-      {id:'reactive_pw', name:'무효전력(kVar)',  type:'숫자', unit:'kVar'},
-      {id:'apparent_pw', name:'피상전력(kVA)',   type:'숫자', unit:'kVA'},
-      {id:'pf',          name:'역률(%)',         type:'숫자', unit:'%'},
-      {id:'freq',        name:'주파수(Hz)',       type:'숫자', unit:'Hz'},
+      {id:'R_ACTIVE',   name:'유효전력(kW)',   type:'숫자', unit:'kW'},
+      {id:'R_Var', name:'무효전력(kVar)',  type:'숫자', unit:'kVar'},
+      {id:'R_kVA', name:'피상전력(kVA)',   type:'숫자', unit:'kVA'},
+      {id:'R_PF',          name:'역률(%)',         type:'숫자', unit:'%'},
+      {id:'R_HZ',        name:'주파수(Hz)',       type:'숫자', unit:'Hz'},
     ],
     '긴급출동': [
       {id:'fault_desc',   name:'장애 현상',     type:'텍스트'},
-      {id:'fault_cause',  name:'원인 분석',     type:'텍스트'},
       {id:'fault_action', name:'조치 내용',     type:'텍스트'},
-      {id:'fault_prevent',name:'재발 방지 대책',type:'텍스트'},
     ],
     '열화상촬영': [] 
   };
@@ -3837,6 +3837,19 @@ function collectFormData() {
       while (vals.length && !vals[vals.length - 1]) vals.pop();  // 뒤쪽 빈칸 정리
       if (vals.length) items[base] = vals.join(' | ');
     });
+  /* 대체 화면(점검항목을 못 받았을 때)의 VCB·ACB 3상 칸도 같은 방식으로 한 열에 (2026-10-17)
+       예전에는 vcb_v_1 · acb_a_1 … 따로 열이 되어 보고서 토큰 {{R_VCB_V.1.A}} · {{VCB.전력}} 이 못 읽었습니다. */
+  ['R_VCB_V', 'R_VCB_A', 'R_ACB_V', 'R_ACB_A'].forEach(base => {
+    if (items[base]) return;
+    const vals = [];
+    for (let n = 1; n <= 30; n++) {
+      if (!(`${base}_${n}` in items)) break;
+      vals.push(String(items[`${base}_${n}`] || '').trim());
+      delete items[`${base}_${n}`];
+    }
+    while (vals.length && !vals[vals.length - 1]) vals.pop();
+    if (vals.length) items[base] = vals.join(' | ');
+  });
   const channels = {};
   if (equip.channels) {
     equip.channels.forEach((ch, i) => {
@@ -4669,7 +4682,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = 'e6458e36';
+  var BUILD = 'ddb7ceb9';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
