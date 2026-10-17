@@ -1174,7 +1174,7 @@ async function startEditInspection() {
   if (!types.length) types.push('월차점검');
 
   // 분기/반기점검은 기본으로 숨겨져 있으므로 미리 표시 대상에 넣습니다
-  S.extraTypesShown = types.filter(t => t === '분기점검' || t === '반기점검');
+  S.extraTypesShown = types.filter(t => t === '연차측정' || t === '분기점검' || t === '반기점검');
 
   // 1) 폼을 비우고 첫 점검구분으로 뼈대 생성 (완료까지 대기)
   const formEl = document.getElementById('formEl');
@@ -2361,7 +2361,7 @@ async function prepareOffline() {
   /* '' (전체 — buildForm 이 「기본」칸과 아코디언 표시 여부를 이걸로 정합니다) ·
      분기점검·반기점검·긴급출동도 받아둡니다 (2026-09-06 · A-9)
      예전에는 '' 를 안 받아 오프라인에서 S.availTypes 가 비어 「기록」 아코디언이 사라졌습니다. */
-  const TYPES = ['', '월차점검', '기록', '측정', '열화상촬영', '분기점검', '반기점검', '긴급출동'];
+  const TYPES = ['', '월차점검', '기록', '측정', '열화상촬영', '연차측정', '분기점검', '반기점검', '긴급출동'];
   const itemJobs = new Map();
   list.forEach(s => TYPES.forEach(t => {
     const k = [s.설비구분 || '', t, s.측정프로필 || ''].join('|');
@@ -2546,8 +2546,9 @@ function renderInspSection(inspTypeOrTypes, site, equip, isLow, isSub, sections)
   const BASE_TYPES  = S.emergencyMode
     ? ['긴급출동']
     : ['월차점검','기록','측정','열화상촬영'];
-  const EXTRA_TYPES = S.emergencyMode ? [] : ['분기점검','반기점검'];
-  const icons = {'월차점검':'🔍','측정':'📐','기록':'📊','분기점검':'📅','반기점검':'🗓','긴급출동':'🚨','열화상촬영':'🌡'};
+  /* 연차측정 (2026-10-17) — 절연·접지·누설 연 1회. 평소에는 [+ 연차측정] 버튼으로만 엽니다 */
+  const EXTRA_TYPES = S.emergencyMode ? [] : ['연차측정','분기점검','반기점검'];
+  const icons = {'월차점검':'🔍','측정':'📐','기록':'📊','연차측정':'📏','분기점검':'📅','반기점검':'🗓','긴급출동':'🚨','열화상촬영':'🌡'};
   if (!S.extraTypesShown) S.extraTypesShown = [];
 
   const renderAcc = function(t) {
@@ -2700,8 +2701,8 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
     </label><textarea id="item_fault_action" placeholder="현장 조치 내용"></textarea></div>`;
     return html;
   }
-  if (inspType === '측정' || inspType === '기록' || inspType === '분기점검' || inspType === '반기점검') {
-    const secIcons = {'측정':'📐','기록':'📊','분기점검':'📅','반기점검':'🗓'};
+  if (inspType === '측정' || inspType === '기록' || inspType === '연차측정' || inspType === '분기점검' || inspType === '반기점검') {
+    const secIcons = {'측정':'📐','기록':'📊','연차측정':'📏','분기점검':'📅','반기점검':'🗓'};
     html += `<div class="sec-title">${secIcons[inspType]||'📐'} ${inspType}</div>`;
     if (inspType === '측정' && !equip.channels) {
       html += `<div style="padding:.6rem;background:#fef3c7;border-radius:8px;font-size:.85rem;color:#92400e;margin-bottom:.5rem;">
@@ -3213,7 +3214,7 @@ function prefetchCheckItems(site) {
   if (!site) return;
   if (!S.checkItemsCache) S.checkItemsCache = {};
   // '' 는 전체 목록 — buildForm 이 「기본」칸·아코디언 표시 여부에 씁니다. 분기·반기도 함께 (2026-09-06 · A-9)
-  const typesToPrefetch = ['', '월차점검', '기록', '측정', '열화상촬영', '분기점검', '반기점검', '긴급출동'];
+  const typesToPrefetch = ['', '월차점검', '기록', '측정', '열화상촬영', '연차측정', '분기점검', '반기점검', '긴급출동'];
   typesToPrefetch.forEach(ty => {
     const cacheKey = `${site.설비구분 || ''}_${ty}_${site.측정프로필 || ''}`;
     if (!S.checkItemsCache[cacheKey]) {
@@ -3304,13 +3305,13 @@ function renderOXRow(item) {
     <div class="ox-name"><span>${escT_(item.항목명)}</span>${badge}</div>
     <div class="ox-cam">
       <div class="ox-grp">
-        <button type="button" class="ox-btn o" onclick="setOX('item_${id}','O')">O</button>
+        <button type="button" class="ox-btn o sel" onclick="setOX('item_${id}','O')">O</button>
         <button type="button" class="ox-btn x" onclick="setOX('item_${id}','X')">X</button>
         ${triBtn}${naBtn}
       </div>
       ${camBtn}
     </div>
-    <input type="hidden" id="item_${id}" value="">
+    <input type="hidden" id="item_${id}" value="O" data-default="O">
   </div>`;
 }
 
@@ -3387,13 +3388,13 @@ function renderDefaultCheckItems(inspType) {
         </div>
         <div class="ox-cam">
           <div class="ox-grp">
-            <button type="button" class="ox-btn o" onclick="setOX('item_${item.id}','O')">O</button>
+            <button type="button" class="ox-btn o sel" onclick="setOX('item_${item.id}','O')">O</button>
             <button type="button" class="ox-btn x" onclick="setOX('item_${item.id}','X')">X</button>
             ${naBtnF}
           </div>
           ${camBtn}
         </div>
-        <input type="hidden" id="item_${item.id}" value="">
+        <input type="hidden" id="item_${item.id}" value="O" data-default="O">
       </div>`;
     } else if (item.type === '숫자') {
       html += `</div><div class="fg">
@@ -3803,9 +3804,22 @@ function collectFormData() {
     const el = document.getElementById(`item_${item.항목ID}`);
     if (el) items[item.항목ID] = el.value;
   });
+  /* 선택하지 않은 점검구분 아코디언의 칸은 모으지 않습니다 (2026-10-17)
+       판정 칸이 기본 「O」 로 채워지므로, 접어 둔(선택 안 한) 월차점검의 판정이
+       「점검했다」 로 제출되면 안 됩니다. 아코디언 밖(기본정보 등)의 칸은 그대로 모읍니다. */
+  const 선택됨 = (S.inspTypes || []);
+  const 안고른칸 = el => {
+    const body = el.closest('[id^="accBody_"]');
+    return body && 선택됨.indexOf(body.id.replace('accBody_', '')) < 0;
+  };
+  Object.keys(items).forEach(k => {
+    const el = document.getElementById(`item_${k}`);
+    if (el && 안고른칸(el)) delete items[k];
+  });
   document.querySelectorAll('[id^="item_"]').forEach(el => {
     const key = el.id.replace('item_','');
     if (key.endsWith('_memo')) return; 
+    if (안고른칸(el)) return;
     if (!(key in items)) items[key] = el.value;
   });
   document.querySelectorAll('[id$="_memo"]').forEach(el => {
@@ -4682,7 +4696,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = 'ddb7ceb9';
+  var BUILD = '0fd3de9c';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
