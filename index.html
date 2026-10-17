@@ -1173,6 +1173,9 @@ async function startEditInspection() {
     .split('+').map(s => s.trim()).filter(Boolean);
   if (!types.length) types.push('월차점검');
 
+  // 긴급출동 기록은 긴급 화면으로 엽니다 — 안 그러면 장애현상·조치내용 칸이 없어 수정 저장 때 비워집니다 (2026-10-17)
+  S.emergencyMode = types.indexOf('긴급출동') >= 0;
+  S.lastFormMode = S.emergencyMode ? 'emergency' : 'normal';
   // 분기/반기점검은 기본으로 숨겨져 있으므로 미리 표시 대상에 넣습니다
   S.extraTypesShown = types.filter(t => t === '연차측정' || t === '분기점검' || t === '반기점검');
 
@@ -1223,7 +1226,19 @@ function applyFormValues(r) {
   setV('f_action_detail', r.조치내용);
   setV('f_vendor', r.요청업체);
   setV('f_note', r.특이사항);
-  if (typeof toggleAction === 'function') toggleAction(r.조치구분 || '없음');
+  if (typeof toggleAction === 'function' && document.getElementById('actionDetail')) toggleAction(r.조치구분 || '없음');
+
+  // 긴급출동 처리결과 (2026-10-17)
+  if (S.emergencyMode && document.getElementById('f_em_status')) {
+    const st = r.완료여부 === '완료' ? '완료' : (r.완료여부 ? '미완료' : '');
+    if (st) setEmergencyStatus(st);
+    if (st === '미완료') {
+      if (['지원팀요청','업체서비스요청','자체처리'].indexOf(r.조치구분) >= 0) setV('f_em_req', r.조치구분);
+      setV('f_em_vendor', r.요청업체);
+      if (r.조치내용 && r.조치내용 !== (r.items || {}).fault_action) setV('f_em_follow', r.조치내용);
+      setEmergencyStatus('미완료');   // 요청처에 맞춰 업체명 칸 다시
+    }
+  }
 
   // 채널 전류 — 시트 컬럼은 slot(No번호), 화면 id는 배열 인덱스 (N-1)
   const equip = S.currentEquip || {};
@@ -1351,6 +1366,8 @@ async function resumeDraft() {
   S.editing = null;
 
   const types = (dr.inspTypes && dr.inspTypes.length) ? dr.inspTypes : ['월차점검'];
+  S.emergencyMode = types.indexOf('긴급출동') >= 0;          // 긴급출동 초안은 긴급 화면으로 (2026-10-17)
+  S.lastFormMode = S.emergencyMode ? 'emergency' : 'normal';
   S.extraTypesShown = dr.extraTypesShown || [];
   S.photoMap = dr.photos || {};
 
@@ -1753,6 +1770,8 @@ async function rebuildFormKeepValues_() {
   });
   const fa = document.getElementById('f_action');
   if (fa && typeof toggleAction === 'function') toggleAction(fa.value || '없음');
+  const fEm = document.getElementById('f_em_status');            // 긴급출동 처리결과 (2026-10-17)
+  if (fEm && fEm.value && typeof setEmergencyStatus === 'function') setEmergencyStatus(fEm.value);
   if (S.editing && typeof markEditMode === 'function') markEditMode(S.editing, []);   // 수정 모드 배너 복원
 }
 
@@ -1819,8 +1838,14 @@ async function buildForm(inspType) {
      ──────────────────────────────────────────────────────────── */
   const 시트기반 = 기본항목.length > 0;
 
+  /* 긴급출동은 날씨·기온·송전전력·인버터 누적발전량·변압기 온도를 묻지 않습니다 (2026-10-17)
+       고장 처리 방문이라 발전량 판단용 값이 필요 없고, 빈칸 그대로 제출되던 칸입니다. */
+  const 긴급 = !!S.emergencyMode;
+
   var envHtml = '';
-  if (시트기반) {
+  if (긴급) {
+    envHtml = '';
+  } else if (시트기반) {
     envHtml = 기본칸조립_(기본항목);
   } else if (!isGeneral) {
     envHtml =
@@ -1860,7 +1885,7 @@ async function buildForm(inspType) {
     <select id="f_seq"></select>
   </div>
   ${envHtml}
-  ${시트기반 ? '' : '<div id="invKwhSection"></div><div id="trTempSection"></div>'}
+  ${(시트기반 || 긴급) ? '' : '<div id="invKwhSection"></div><div id="trTempSection"></div>'}
 
 <div class="fg" style="margin-bottom:.3rem;">
     <label>점검구분 * <span style="font-weight:400;color:var(--muted);font-size:.78rem;">항목을 탭하면 펼쳐집니다 · 복수 선택 가능</span></label>
@@ -2642,6 +2667,8 @@ function renderInspSection(inspTypeOrTypes, site, equip, isLow, isSub, sections)
   //  조치내용을 적어둔 채 아코디언을 탭하면 칸이 접혀 「지워진 것처럼」 보였습니다.
   const fAction = document.getElementById('f_action');
   if (fAction && typeof toggleAction === 'function') toggleAction(fAction.value || '없음');
+  const fEm = document.getElementById('f_em_status');            // 긴급출동 처리결과 버튼 색 (2026-10-17)
+  if (fEm && fEm.value) setEmergencyStatus(fEm.value);
 
   // ── 사진 카운트·뱃지 복원 (2026-09-04 · R-3) ──
   //  재렌더링으로 버튼이 새로 그려지면 「📷 N」 표시와 충족(done) 상태가
@@ -2698,7 +2725,8 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
     </label><textarea id="item_fault_desc" placeholder="장애 현상 상세 기술"></textarea></div>
     <div class="fg"><label>조치 내용 *
       <button class="cam-btn" id="cam_item_fault_action" onclick="takeItemPhoto('item_fault_action','조치내용')" style="margin-left:.3rem;">📷${getCamBadge('item_fault_action')}</button>
-    </label><textarea id="item_fault_action" placeholder="현장 조치 내용"></textarea></div>`;
+    </label><textarea id="item_fault_action" placeholder="현장 조치 내용"></textarea></div>
+    ${renderEmergencyStatusHtml_()}`;
     return html;
   }
   if (inspType === '측정' || inspType === '기록' || inspType === '연차측정' || inspType === '분기점검' || inspType === '반기점검') {
@@ -3012,8 +3040,69 @@ document.addEventListener('click', function (e) {
   removeMapPhoto_(btn.dataset.photoKey, Number(btn.dataset.photoIdx));
 });
 
+/* ── 긴급출동 처리결과 (2026-10-17) ──────────────────────────────
+     긴급출동은 아래 「조치사항」 칸(종합점검결과·조치구분)을 그리지 않습니다.
+     대신 여기서 【처리완료 / 미처리】 를 꼭 고르게 합니다.
+       처리완료 → 점검기록표 완료여부 「완료」 · 장애/조치이력에 완료로 남김
+       미처리   → 완료여부 「미완료」 · 다음 방문 때 미결사항 배너 · 보고서 {{미결사항}}
+     ⚠️ 예전에는 조치구분 기본값 「없음」 이 그대로 제출되어
+        「미조치」 라고 적은 긴급출동도 완료로 기록됐습니다 (9~10월 실데이터). */
+function renderEmergencyStatusHtml_() {
+  return `
+    <div class="fg"><label>처리결과 *</label>
+      <div style="display:flex;gap:.4rem;">
+        <button type="button" class="btn btn-out em-st" data-v="완료" onclick="setEmergencyStatus('완료')" style="flex:1;margin:0;">✅ 처리완료</button>
+        <button type="button" class="btn btn-out em-st" data-v="미완료" onclick="setEmergencyStatus('미완료')" style="flex:1;margin:0;">⏳ 미처리</button>
+      </div>
+      <input type="hidden" id="f_em_status" value="">
+    </div>
+    <div id="emFollowWrap" style="display:none;">
+      <div class="fg"><label>후속조치 요청처</label>
+        <select id="f_em_req" onchange="document.getElementById('emVendorWrap').style.display=this.value==='업체서비스요청'?'block':'none'">
+          <option value="지원팀요청">지원팀 요청</option>
+          <option value="업체서비스요청">업체 서비스 요청</option>
+          <option value="자체처리">자체처리 (재방문)</option>
+        </select>
+      </div>
+      <div class="fg" id="emVendorWrap" style="display:none;"><label>요청 업체명</label><input type="text" id="f_em_vendor" placeholder="업체명"></div>
+      <div class="fg"><label>남은 일 (후속조치 내용)</label><textarea id="f_em_follow" placeholder="예) SPD 3개 구입 후 교체 필요"></textarea></div>
+    </div>`;
+}
+
+function setEmergencyStatus(v) {
+  const el = document.getElementById('f_em_status');
+  if (!el) return;
+  el.value = v;
+  document.querySelectorAll('.em-st').forEach(b => {
+    const on = b.dataset.v === v;
+    b.style.background  = on ? (v === '완료' ? '#dcfce7' : '#fef3c7') : '';
+    b.style.borderColor = on ? (v === '완료' ? '#16a34a' : '#d97706') : '';
+    b.style.fontWeight  = on ? '700' : '';
+  });
+  const w = document.getElementById('emFollowWrap');
+  if (w) w.style.display = v === '미완료' ? 'block' : 'none';
+  const req = document.getElementById('f_em_req');
+  const vw  = document.getElementById('emVendorWrap');
+  if (req && vw) vw.style.display = req.value === '업체서비스요청' ? 'block' : 'none';
+}
+
 function renderActionSection(wrap) {
   const div = document.createElement('div');
+  /* 긴급출동 — 조치사항(종합점검결과·조치구분·특이사항)을 그리지 않습니다 (2026-10-17)
+       처리완료/미처리는 긴급출동 칸 안의 「처리결과」 가 정합니다. */
+  if (S.emergencyMode) {
+    div.innerHTML = `
+  <div class="sec-title">📷 추가사진</div>
+  <button type="button" onclick="addSitePhoto()"
+    style="width:100%;padding:.75rem;border:1.5px dashed var(--border);border-radius:10px;
+           background:#f8fafc;font-size:.9rem;cursor:pointer;text-align:center;margin-bottom:.5rem;">
+    📷 사진 추가
+  </button>
+  <div class="photo-grid" id="sitePhotoGrid">${renderPhotoGridHtml_('site_extra')}</div>
+  <button class="btn btn-ok" onclick="submitForm()">📤 제출</button>`;
+    wrap.appendChild(div);
+    return;
+  }
   div.innerHTML = `
   <div class="sec-title">📷 추가사진</div>
   <button type="button" onclick="addSitePhoto()"
@@ -3910,7 +3999,26 @@ function collectFormData() {
     }
   }
 
-  return {
+  /* 긴급출동 처리결과 → 조치구분·조치내용·완료여부 (2026-10-17)
+       처리완료 : 조치구분 「현장처리」 · 조치내용 = 현장 조치 내용 · 완료
+       미처리   : 조치구분 = 후속조치 요청처 · 조치내용 = 남은 일 · 미완료  */
+  let em = null;
+  if (S.emergencyMode) {
+    const st  = document.getElementById('f_em_status')?.value || '';
+    const fa  = String(items.fault_action || '').trim();
+    em = { 완료여부: st, 종합점검결과: '' };
+    if (st === '완료') {
+      em.조치구분 = '현장처리'; em.조치내용 = fa; em.요청업체 = '';
+    } else if (st === '미완료') {
+      em.조치구분 = document.getElementById('f_em_req')?.value || '지원팀요청';
+      em.조치내용 = String(document.getElementById('f_em_follow')?.value || '').trim() || fa;
+      em.요청업체 = em.조치구분 === '업체서비스요청' ? (document.getElementById('f_em_vendor')?.value || '') : '';
+    } else {
+      em.조치구분 = '없음'; em.조치내용 = ''; em.요청업체 = '';
+    }
+  }
+
+  const out = {
     no:            site.no,
     설비명칭:      site.name,
     점검일자:      document.getElementById('f_date')?.value || '',
@@ -3931,6 +4039,8 @@ function collectFormData() {
     특이사항:      document.getElementById('f_note')?.value || '',
     items, channels
   };
+  if (em) Object.assign(out, em);
+  return out;
 }
 function setSubmitBusy(busy, text) {
   const btn = document.querySelector('#mt-form .btn-ok');
@@ -3954,6 +4064,10 @@ function setSubmitBusy(busy, text) {
 async function submitForm() {
   const d = collectFormData();
   if (!d.점검일자) return toast('점검일자를 입력하세요');
+  if (S.emergencyMode) {
+    if (!String((d.items || {}).fault_desc || '').trim()) return toast('장애 현상을 적어 주세요');
+    if (!d.완료여부) return toast('처리결과(처리완료 / 미처리)를 골라 주세요');
+  }
 
   // 필수 사진 검증 (H-4)
   //  현장 흐름을 끊지 않도록 확인창은 띄우지 않습니다.
@@ -4696,7 +4810,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '0fd3de9c';
+  var BUILD = 'e16b7ffb';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
