@@ -2184,11 +2184,16 @@ function naviResetChoice() {
  *  한 번 받은 항목을 localStorage 에 남겨 오프라인에서도 실제 항목을 씁니다.
  */
 async function fetchCheckItems(site, inspType) {
-  const key = 'ci_' + [site?.설비구분 || '', inspType || '', site?.측정프로필 || ''].join('|');
+  /* 설비번호를 함께 보냅니다 (2026-10-28)
+       서버가 그 발전소의 【보고서양식】 을 보고 물을 항목을 정할 수 있게요.
+       「양식별항목」 시트에 그 양식이 없으면 서버가 예전처럼 측정프로필로 돕니다.
+       ⚠️ 캐시 열쇠에도 설비번호를 넣습니다 — 안 그러면 양식이 달라도
+          같은 항목 목록을 돌려받습니다. */
+  const key = 'ci_' + [site?.no || '', site?.설비구분 || '', inspType || '', site?.측정프로필 || ''].join('|');
 
   if (S.isOnline) {
     const items = await api('getCheckItems', {
-      siteType: site?.설비구분, inspType: inspType, profile: site?.측정프로필 || ''
+      no: site?.no, siteType: site?.설비구분, inspType: inspType, profile: site?.측정프로필 || ''
     });
     if (Array.isArray(items)) {
       try { localStorage.setItem(key, JSON.stringify(items)); } catch (_) {}
@@ -3866,16 +3871,29 @@ async function validateCh(el, maxCnt, label, slot) {
   const st = findChStatus(el);
   if (!st) return;
   if (nums.length === 0) return;
-  // 입력 개수만 표시 (이상값 판단은 서버에서 수행 → 검토사항 기록)
-  st.textContent=`${nums.length}/${maxCnt} 입력`;
-  st.style.color='var(--ok)';
-  if (nums.length !== maxCnt && nums.length > 0) {
-    if (confirm(`${label||'접속반'} 채널 수가 설정값(${maxCnt})과 다릅니다.\n실측값(${nums.length})으로 업데이트할까요?`)) {
-      await api('updateChannelCount', {no: S.currentSite?.no, slot: slot, newCount: nums.length, newLabel: label});
-      toast(`✅ 채널 수 ${nums.length}로 업데이트`);
-      S.currentEquip = await fetchEquipInfo(S.currentSite?.no);
-    }
+  /* 빈 자리까지 셉니다 (2026-10-30)
+       「2.2/2.1//2.3」 처럼 가운데를 비우면 3번 채널을 못 잰 것입니다.
+       예전에는 빈 칸을 버려서 【어느 자리】 인지가 사라졌습니다. */
+  const 자리 = v.replace(/\/+$/,'').split('/');
+  const 빈자리 = [];
+  자리.forEach(function (p, i) { if (String(p).trim() === '') 빈자리.push(i + 1); });
+
+  /* 알려만 줍니다 — 묻지 않고, 대장도 안 고칩니다 (2026-10-30 결정)
+       ⚠️ 예전에는 「실측값으로 대장을 고칠까요?」 를 물었습니다.
+          [예] 를 누르면 대장이 바뀌면서 서버 검토메모가 사라져,
+          7채널짜리에서 6개만 잰 사실이 오류도 기록도 없이 없어졌습니다.
+          이제 앱은 표시만 하고, 【기록은 서버가 남깁니다】 —
+          점검기록표의 그 NoN 칸 메모와 검토메모에 들어갑니다.
+          대장을 고치는 일은 관리자가 확인하고 합니다. */
+  if (nums.length === maxCnt && !빈자리.length) {
+    st.textContent = `${nums.length}/${maxCnt} 입력`;
+    st.style.color = 'var(--ok)';
+    return;
   }
+  st.textContent = `⚠ ${nums.length}/${maxCnt} 입력`
+                 + (빈자리.length ? ` · ${빈자리.join('·')}번 빔` : '')
+                 + ' — 그대로 제출하면 기록에 남습니다';
+  st.style.color = 'var(--ng)';
 }
 function toggleAction(v) {
   document.getElementById('actionDetail').style.display = v==='없음'?'none':'block';
@@ -4810,7 +4828,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = 'e16b7ffb';
+  var BUILD = '19b6c879';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
