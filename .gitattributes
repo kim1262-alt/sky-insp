@@ -1,0 +1,18 @@
+# 줄끝 문자를 LF 로 고정합니다 (2026-11-05)
+#
+# 왜 — Windows git 은 기본으로 「저장소엔 LF, 내 PC엔 CRLF」 로 바꿔 둡니다.
+#      그래서 배포할 때마다 이런 경고가 떴습니다.
+#        warning: in the working copy of 'index.html',
+#                 LF will be replaced by CRLF the next time Git touches it
+#      동작에는 아무 문제가 없지만, 파일을 안 고쳤는데도 「바뀐 것」으로 보여
+#      진짜 변경과 섞입니다.
+#
+# 여기 있는 것은 전부 웹에 올리는 파일이라 LF 가 맞습니다.
+# 브라우저·서비스워커는 줄끝을 가리지 않습니다.
+
+* text=auto eol=lf
+
+# 아이콘은 글자 파일이 아닙니다 — 손대면 깨집니다
+*.png binary
+*.ico binary
+*.jpg binary
