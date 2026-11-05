@@ -613,12 +613,68 @@ let _flushing = false;
  *
  * ⚠️ 이전에는 결과를 아무것도 돌려주지 않아, 제출이 실패해도 사용자가 알 수 없었습니다. (H-12)
  */
+/* ════════════════════════════════════════════════════════════
+   뒤에서 보내기 — 안드로이드 · 아이폰이 서로 다릅니다 (2026-11-05)
+
+   안드로이드 : 서비스워커가 이어받습니다. 앱을 닫아도 보냅니다.
+   아이폰     : Background Sync 가 아예 없습니다.
+                대신 전송이 끝날 때까지 【화면이 안 꺼지게】 잡아 둡니다.
+                그러면 주머니에 넣어도 전송이 이어집니다.
+
+   ⚠️ 둘 다 안 되는 기기여도 예전과 똑같이 동작합니다. 더해지는 장치입니다.
+   ════════════════════════════════════════════════════════════ */
+
+/** 서비스워커에 「뒤에서 보내 줘」 라고 등록합니다. 안 되는 기기는 조용히 넘어갑니다. */
+function 등록_뒤에서보내기() {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.ready.then(function (reg) {
+      if (reg.sync) {
+        /* 안드로이드 — 앱이 닫혀도 브라우저가 알아서 보냅니다 */
+        reg.sync.register('flush-submits').catch(function (e) {
+          console.warn('뒤에서보내기 등록 실패(화면 쪽으로 보냅니다)', e && e.message);
+        });
+      } else if (reg.active) {
+        /* 아이폰 — sync 가 없습니다. 적어도 화면 전환은 버티도록 한 번 부탁해 둡니다 */
+        reg.active.postMessage('flush');
+      }
+    }).catch(function () {});
+  } catch (_) {}
+}
+
+/** 전송하는 동안 화면이 안 꺼지게 (아이폰에 특히 필요) */
+let _화면잡기 = null;
+async function 화면잡기_() {
+  try {
+    if (!navigator.wakeLock || _화면잡기) return;
+    _화면잡기 = await navigator.wakeLock.request('screen');
+    _화면잡기.addEventListener('release', function () { _화면잡기 = null; });
+  } catch (_) { _화면잡기 = null; }   /* 지원 안 하거나 배터리 절약 중이면 그냥 넘어갑니다 */
+}
+function 화면놓기_() {
+  try { if (_화면잡기) _화면잡기.release(); } catch (_) {}
+  _화면잡기 = null;
+}
+
+/* 서비스워커가 다 보내고 알려 주면 화면을 새로 그립니다 */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', function (e) {
+    const m = e && e.data;
+    if (!m || m.종류 !== '전송결과') return;
+    if (m.보냄 > 0) {
+      try { toast(`📤 ${m.보냄}건 전송 완료` + (m.남음 ? ` · ${m.남음}건 남음` : ''), 4000); } catch (_) {}
+      try { if (typeof checkQueue === 'function') checkQueue(); } catch (_) {}
+    }
+  });
+}
+
 async function autoFlushSubmits(quiet) {
   const R = { ok: 0, fail: 0, photoOk: 0, photoFail: 0, lastInspId: '', error: '', skipped: false };
   if (_flushing) { R.skipped = true; return R; }
   if (!S.isOnline) { R.skipped = true; R.error = '오프라인'; return R; }
 
   _flushing = true;
+  await 화면잡기_();            /* 보내는 동안 화면이 안 꺼지게 */
   try {
     const items = (await withIdb(db => new Promise(res => {
       const req = db.transaction(IDB_SUBMIT, 'readonly').objectStore(IDB_SUBMIT).getAll();
@@ -662,18 +718,45 @@ async function autoFlushSubmits(quiet) {
         }
         R.lastInspId = inspId || R.lastInspId;
 
-        // ── 2) 사진 업로드 (실패한 것만 큐에 남깁니다) ──
+        /* ── 2) 사진 업로드 — 8장씩 묶어 보냅니다 (2026-11-05) ──
+             ⚠️ 예전에는 한 장에 서버를 한 번씩 불렀습니다.
+                사진 12장이면 왕복 12번이고, 그때마다 서버가 폴더를 다시 찾고
+                PHOTO_LOG 를 통째로 다시 읽었습니다. 현장에서 제출 뒤 한참 멈춰 보이던 까닭입니다.
+                서버에는 8장 묶음 창구(flushPhotoQueue)가 2026-09-06 부터 있었는데
+                쓰는 길이 끊겨 있었습니다.
+             실패한 장만 큐에 남깁니다 — 서버가 장마다 ok 를 돌려줍니다. */
         const photos = p.photos || [];
         const remain = [];
-        for (const ph of photos) {
+        photos.forEach(function (ph) {
           ph.inspId    = inspId;
           ph.설비명칭  = ph.설비명칭 || p.data?.설비명칭 || '미지정';
           ph.no        = ph.no || p.data?.no || '';
           ph.uploader  = ph.uploader || p.data?.점검자 || S.user?.name || '';
           ph.itemName  = ph.itemName || ph.label || ph.itemId || '점검사진';
-          const pr = await api('uploadPhoto', ph);
-          if (pr && pr.success) R.photoOk++;
-          else { R.photoFail++; remain.push(ph); }
+        });
+
+        const 묶음 = 8;                       // 서버 PHOTO_FLUSH_MAX 와 같은 값
+        for (let i = 0; i < photos.length; i += 묶음) {
+          const 이번 = photos.slice(i, i + 묶음);
+          const pr = await api('flushPhotoQueue', { queue: 이번 });
+
+          /* 응답이 없으면(끊김·시간초과) 이번 묶음은 통째로 다음에 다시 보냅니다.
+             uploadPhoto 가 점검ID+파일명으로 중복을 막으므로 다시 보내도 두 장이 되지 않습니다. */
+          if (!pr) { 이번.forEach(x => remain.push(x)); R.photoFail += 이번.length; continue; }
+
+          const 낱장 = Array.isArray(pr.results) ? pr.results : null;
+          if (낱장 && 낱장.length === 이번.length) {
+            이번.forEach(function (x, k) {
+              if (낱장[k] && 낱장[k].ok) R.photoOk++;
+              else { R.photoFail++; remain.push(x); }
+            });
+          } else {
+            /* 옛 서버(낱장 결과를 안 주는 판)와도 맞물리게 — 개수만으로 가립니다.
+               앞에서부터 처리하므로 성공 수만큼은 끝난 것으로 보고 나머지를 남깁니다. */
+            const 성공 = Math.max(0, Math.min(이번.length, Number(pr.uploaded) || 0));
+            R.photoOk += 성공;
+            이번.slice(성공).forEach(x => { R.photoFail++; remain.push(x); });
+          }
         }
 
         if (remain.length) {
@@ -708,6 +791,7 @@ async function autoFlushSubmits(quiet) {
     return R;
   } finally {
     _flushing = false;
+    화면놓기_();                /* 다 보냈으면 화면을 놓아 줍니다 — 배터리 */
   }
 }
 async function appInit() {
@@ -2726,10 +2810,13 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
   if (inspType === '긴급출동') {
     html += `<div class="sec-title">🚨 긴급출동</div>
     <div class="fg"><label>장애 현상 *
-      <button class="cam-btn" id="cam_item_fault_desc" onclick="takeItemPhoto('item_fault_desc','장애현상')" style="margin-left:.3rem;">📷${getCamBadge('item_fault_desc')}</button>
+      <!-- 2026-11-05 : takeItemPhoto → takeItemPhotoMulti
+           여기 둘만 【한 장씩】 골라지던 까닭입니다 (takeItemPhoto 는 multiple=false).
+           점검항목·추가사진·열화상은 모두 여러 장이라, 긴급출동만 다르게 동작했습니다. -->
+      <button class="cam-btn" id="cam_item_fault_desc" onclick="takeItemPhotoMulti('item_fault_desc','장애현상',1)" style="margin-left:.3rem;">📷${getCamBadge('item_fault_desc')}</button>
     </label><textarea id="item_fault_desc" placeholder="장애 현상 상세 기술"></textarea></div>
     <div class="fg"><label>조치 내용 *
-      <button class="cam-btn" id="cam_item_fault_action" onclick="takeItemPhoto('item_fault_action','조치내용')" style="margin-left:.3rem;">📷${getCamBadge('item_fault_action')}</button>
+      <button class="cam-btn" id="cam_item_fault_action" onclick="takeItemPhotoMulti('item_fault_action','조치내용',1)" style="margin-left:.3rem;">📷${getCamBadge('item_fault_action')}</button>
     </label><textarea id="item_fault_action" placeholder="현장 조치 내용"></textarea></div>
     ${renderEmergencyStatusHtml_()}`;
     return html;
@@ -4121,6 +4208,11 @@ async function submitForm() {
       ? '📤 제출 접수 — 전송은 백그라운드에서 진행됩니다'
       : '📡 오프라인 — 연결되면 자동 전송됩니다', 3000);
 
+    /* 뒤에서 보내 달라고 서비스워커에 부탁해 둡니다 (2026-11-05)
+       안드로이드는 앱을 닫아도 보냅니다. iOS 는 이 등록이 실패하는데, 그래도 괜찮습니다 —
+       아래 화면 쪽 전송이 예전처럼 돌고, 그동안 화면이 안 꺼지게 잡아 둡니다. */
+    등록_뒤에서보내기();
+
     if (S.isOnline) {
       // await 하지 않습니다. 기다리면 다음 점검이 막힙니다.
       setTimeout(function () { autoFlushSubmits(false); }, 300);
@@ -4294,7 +4386,14 @@ async function saveInspectionToOfflineQueue(d) {
   d.제출키 = (d.no || 'NO') + '_' + Date.now() + '_'
            + Math.random().toString(36).slice(2, 8);
 
-  const queueObj = { payload: { data: d, photos: photos }, createdAt: Date.now() };
+  /* ⚠️ 토큰을 큐에 같이 담습니다 (2026-11-05)
+        서비스워커가 뒤에서 보낼 때 쓰는데, 서비스워커는 localStorage 를 못 봅니다.
+        화면이 꺼져 있어도 서버가 「누가 보냈는지」 알 수 있어야 합니다. */
+  const queueObj = {
+    payload: { data: d, photos: photos },
+    token: (typeof currentToken === 'function' ? (currentToken() || '') : ''),
+    createdAt: Date.now()
+  };
 
   const saved = await withIdb(db => new Promise(res => {
     const tx = db.transaction(IDB_SUBMIT, 'readwrite');
@@ -4828,7 +4927,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '19b6c879';
+  var BUILD = '162e1ed3';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
