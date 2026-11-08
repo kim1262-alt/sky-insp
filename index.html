@@ -1580,7 +1580,11 @@ function fmtNoticeDate(iso) {
  *     수용가별 전달사항도 항상 없음 처리됐습니다.
  */
 async function showNoticeIfAny(site) {
-  const r = await api('getNotice', { no: site.no });
+  /* 설비번호는 보내지 않습니다 (2026-11-08 · 묶음 B P7)
+     서버는 설비번호가 오면 수용가관리대장을 통째로 읽어 r.site 를 만드는데,
+     화면은 그 값을 안 쓰고 받아둔 목록의 site.전달사항 을 씁니다(아래).
+     발전소를 열 때마다 대장 전체 읽기 1번이 헛돌았습니다. */
+  const r = await api('getNotice', {});
   const notices = [];
 
   const common = r && r.common;
@@ -2267,32 +2271,77 @@ function naviResetChoice() {
  *  화면이 하드코딩 폴백 항목으로 떨어집니다.
  *  한 번 받은 항목을 localStorage 에 남겨 오프라인에서도 실제 항목을 씁니다.
  */
-async function fetchCheckItems(site, inspType) {
-  /* 설비번호를 함께 보냅니다 (2026-10-28)
-       서버가 그 발전소의 【보고서양식】 을 보고 물을 항목을 정할 수 있게요.
-       「양식별항목」 시트에 그 양식이 없으면 서버가 예전처럼 측정프로필로 돕니다.
-       ⚠️ 캐시 열쇠에도 설비번호를 넣습니다 — 안 그러면 양식이 달라도
-          같은 항목 목록을 돌려받습니다. */
-  const key = 'ci_' + [site?.no || '', site?.설비구분 || '', inspType || '', site?.측정프로필 || ''].join('|');
+/* ── 점검항목은 발전소당 【전체 목록 한 벌】 만 받고, 점검구분은 앱에서 거릅니다 (2026-11-08 · 묶음 B P1·P2)
+     예전 — 점검구분마다(9가지) 서버를 따로 불렀고, 캐시 열쇠가 쓰는 곳(설비번호 포함)과
+            읽는 곳(설비번호 없음)이 달라 「받아둔 것 먼저」 가 한 번도 안 먹었습니다.
+            폼을 열 때마다 서버를 기다렸고(최대 30초), 받아두기도 대표 1곳 열쇠만 남겨
+            통신두절 현장이 기본 항목표로 그려질 수 있었습니다 (V-2).
+     지금 — 서버 getCheckItems 의 점검구분 거르기는
+              「점검구분이 ALL 이거나 그 구분과 같은 행」 하나뿐이고(Code.js getCheckItems_),
+            나머지 규칙(측정프로필·양식)은 점검구분과 무관합니다.
+            → 전체('') 목록을 같은 규칙으로 거르면 서버가 준 것과 똑같습니다(순서도 같음).
+     캐시 열쇠는 한 곳(ciKey_)에서만 만듭니다 — 쓰는 곳·읽는 곳이 다시 어긋나지 않게. */
+function ciKey_(site) {
+  return 'ci2_' + [site?.no || '', site?.설비구분 || '', site?.측정프로필 || ''].join('|');
+}
+/** 예전 열쇠(전체 목록) — 업데이트 직후 오프라인 현장을 위해 읽기만 합니다 */
+function ciOldKey_(site) {
+  return 'ci_' + [site?.no || '', site?.설비구분 || '', '', site?.측정프로필 || ''].join('|');
+}
+function ciFilter_(all, inspType) {
+  if (!Array.isArray(all)) return all;
+  if (!inspType) return all;
+  return all.filter(it => {
+    const g = String(it.점검구분 || '').trim();
+    return g === 'ALL' || g === inspType;
+  });
+}
+/** 받아둔 전체 목록 — 없으면 null */
+function ciReadAll_(site) {
+  const a = readCache_(ciKey_(site));
+  if (Array.isArray(a)) return a;
+  const b = readCache_(ciOldKey_(site));
+  return Array.isArray(b) ? b : null;
+}
+/* 같은 발전소를 짧은 사이에 여러 번 묻지 않게 — 진행 중인 요청은 함께 기다리고,
+   받은 값은 5분 동안 그대로 씁니다 (아코디언을 탭할 때마다 서버를 부르지 않게). */
+const _ciLive = {};
+const CI_FRESH_MS = 5 * 60 * 1000;
+function ciForget_() { Object.keys(_ciLive).forEach(k => delete _ciLive[k]); }
 
-  if (S.isOnline) {
-    const items = await api('getCheckItems', {
-      no: site?.no, siteType: site?.설비구분, inspType: inspType, profile: site?.측정프로필 || ''
-    });
+/** 서버에서 전체 목록 — 성공하면 받아둔 것도 갈아 끼웁니다. 실패하면 null */
+function ciFetchAll_(site) {
+  const key = ciKey_(site);
+  const live = _ciLive[key];
+  if (live && (live.p || (Date.now() - live.t) < CI_FRESH_MS)) return live.p || Promise.resolve(live.v);
+  const p = api('getCheckItems', {
+    no: site?.no, siteType: site?.설비구분, inspType: '', profile: site?.측정프로필 || ''
+  }).then(items => {
     if (Array.isArray(items)) {
       try { localStorage.setItem(key, JSON.stringify(items)); } catch (_) {}
+      _ciLive[key] = { t: Date.now(), v: items, p: null };
       return items;
     }
-  }
+    delete _ciLive[key];
+    return null;
+  }).catch(() => { delete _ciLive[key]; return null; });
+  _ciLive[key] = { t: Date.now(), v: null, p: p };
+  return p;
+}
 
+async function fetchCheckItems(site, inspType) {
+  /* 설비번호를 함께 보냅니다 (2026-10-28) — 서버가 그 발전소의 【보고서양식】 을 보고
+     물을 항목을 정할 수 있게요. 그래서 캐시 열쇠에도 설비번호가 들어갑니다(ciKey_). */
+  if (S.isOnline) {
+    const all = await ciFetchAll_(site);
+    if (Array.isArray(all)) return ciFilter_(all, inspType);
+  }
   // 오프라인이거나 조회 실패 → 마지막으로 받아둔 항목 사용
-  try {
-    const cached = JSON.parse(localStorage.getItem(key) || 'null');
-    if (Array.isArray(cached)) {
-      if (!S.isOnline) console.log('오프라인 — 저장된 점검항목 사용:', key);
-      return cached;
-    }
-  } catch (_) {}
+  const cached = ciReadAll_(site);
+  if (Array.isArray(cached)) {
+    if (!S.isOnline) console.log('오프라인 — 저장된 점검항목 사용:', ciKey_(site));
+    return ciFilter_(cached, inspType);
+  }
   return [];
 }
 
@@ -2337,8 +2386,8 @@ function sameJson_(a, b) {
  *  @return {{items:Array, refresh:Promise<Array|null>}}  refresh 는 서버 값(없으면 null)
  */
 async function fetchCheckItemsFast_(site, inspType) {
-  const key = 'ci_' + [site?.설비구분 || '', inspType || '', site?.측정프로필 || ''].join('|');
-  const cached = readCache_(key);
+  const all = ciReadAll_(site);                     // 열쇠는 fetchCheckItems 와 같은 ciKey_ (V-2)
+  const cached = Array.isArray(all) ? ciFilter_(all, inspType) : null;
   if (Array.isArray(cached)) {
     const refresh = S.isOnline
       ? fetchCheckItems(site, inspType).then(n => (Array.isArray(n) && !sameJson_(n, cached)) ? n : null).catch(() => null)
@@ -2470,23 +2519,18 @@ async function prepareOffline() {
   }
   if (!list.length) return toast('받아둘 발전소가 없습니다');
 
-  /* 점검항목은 「설비구분 + 점검구분 + 측정프로필」이 같으면 내용도 같습니다.
-     발전소마다 부르면 같은 것을 여러 번 받게 되므로 중복을 걷어냅니다. */
-  /* '' (전체 — buildForm 이 「기본」칸과 아코디언 표시 여부를 이걸로 정합니다) ·
-     분기점검·반기점검·긴급출동도 받아둡니다 (2026-09-06 · A-9)
-     예전에는 '' 를 안 받아 오프라인에서 S.availTypes 가 비어 「기록」 아코디언이 사라졌습니다. */
-  const TYPES = ['', '월차점검', '기록', '측정', '열화상촬영', '연차측정', '분기점검', '반기점검', '긴급출동'];
-  const itemJobs = new Map();
-  list.forEach(s => TYPES.forEach(t => {
-    const k = [s.설비구분 || '', t, s.측정프로필 || ''].join('|');
-    if (!itemJobs.has(k)) itemJobs.set(k, { site: s, type: t });
-  }));
+  /* 점검항목은 발전소마다 전체 목록 한 벌 (2026-11-08 · 묶음 B P1·P2)
+     예전에는 「설비구분+점검구분+측정프로필」 이 같은 곳끼리 대표 1곳만 받았는데,
+     서버는 설비번호(보고서양식)도 보고, 캐시 열쇠에도 설비번호가 들어가
+     나머지 발전소는 받아둔 것이 없는 셈이었습니다 (V-2).
+     점검구분별(9가지)은 앱이 이 한 벌에서 거릅니다 (ciFilter_). */
+  ciForget_();                                               /* 받아두기는 늘 새 값으로 */
 
   const jobs = []
     .concat(list.map(s => () => fetchEquipInfo(s.no)))
     .concat(list.map(s => () => fetchSiteInspections(s.no)))   /* 회차 계산용 */
     .concat(list.map(s => () => fetchPendingFaults(s.no)))     /* 미결사항 배너용 */
-    .concat([...itemJobs.values()].map(j => () => fetchCheckItems(j.site, j.type)));
+    .concat(list.map(s => () => ciFetchAll_(s)));
 
   const total = jobs.length;
   let done = 0;
@@ -3391,19 +3435,26 @@ async function restoreOfflineQueueForSite(no) {
 }
 
 
+/* 메모리 캐시 열쇠 — 설비번호까지 넣습니다 (2026-11-08 · 묶음 B)
+   예전에는 설비구분·점검구분·측정프로필만 넣어, 양식이 다른 두 발전소가 같은 항목을 나눠 썼습니다. */
+function ciMemKey_(site, ty) {
+  return [site?.no || '', site?.설비구분 || '', ty || '', site?.측정프로필 || ''].join('_');
+}
+
 function prefetchCheckItems(site) {
   if (!site) return;
   if (!S.checkItemsCache) S.checkItemsCache = {};
-  // '' 는 전체 목록 — buildForm 이 「기본」칸·아코디언 표시 여부에 씁니다. 분기·반기도 함께 (2026-09-06 · A-9)
+  /* 서버는 한 번만 부릅니다 — 전체 목록 한 벌을 받아 점검구분별로 나눠 담습니다 (묶음 B P2)
+     예전에는 점검구분 9가지를 따로 불러 발전소를 열 때마다 서버 호출이 9번 나갔습니다.
+     '' 는 전체 목록 — buildForm 이 「기본」칸·아코디언 표시 여부에 씁니다 (A-9) */
   const typesToPrefetch = ['', '월차점검', '기록', '측정', '열화상촬영', '연차측정', '분기점검', '반기점검', '긴급출동'];
-  typesToPrefetch.forEach(ty => {
-    const cacheKey = `${site.설비구분 || ''}_${ty}_${site.측정프로필 || ''}`;
-    if (!S.checkItemsCache[cacheKey]) {
-      fetchCheckItems(site, ty).then(items => {
-        if (items && items.length) S.checkItemsCache[cacheKey] = items;
-      });
-    }
-  });
+  fetchCheckItems(site, '').then(all => {
+    if (!Array.isArray(all) || !all.length) return;
+    typesToPrefetch.forEach(ty => {
+      const cacheKey = ciMemKey_(site, ty);
+      if (!S.checkItemsCache[cacheKey]) S.checkItemsCache[cacheKey] = ciFilter_(all, ty);
+    });
+  }).catch(() => {});
 }
 
 async function selectInspType(t) {
@@ -3429,7 +3480,7 @@ async function selectInspType(t) {
   if (!S.checkItemsCache) S.checkItemsCache = {};
   let allItems = [];
   for (const ty of S.inspTypes) {
-    const cacheKey = `${site?.설비구분||''}_${ty}_${site?.측정프로필||''}`;
+    const cacheKey = ciMemKey_(site, ty);
     if (!S.checkItemsCache[cacheKey]) {
       /* 받아둔 것이 있으면 그걸로 바로 그리고 서버 값은 뒤에서 갱신 (2026-09-06 · A-11)
          예전에는 아코디언을 탭할 때마다 서버 응답을 기다려 느린 현장에서 수십 초 멈췄습니다. */
@@ -3639,6 +3690,19 @@ function openPhotoInput(itemId, label, minCount, multiple) {
      · 열화상  : 'thermal'   (서버 uploadPhoto 는 /thermal/i 키를 열화상 폴더로 보냅니다)
    화면 그리드는 이 상태에서 다시 그리므로(renderPhotoGrid_) 재렌더링에도 살아남습니다.
    @return {{saved:number, before:number, after:number}} 담은 장수 · 원본/압축 바이트 */
+/* 사진마다 고유한 이름 (2026-11-08 · 묶음 B V-1)
+   서버는 「점검ID + 파일명」 이 같으면 이미 올라간 사진으로 보고 저장하지 않은 채 성공을 돌려줍니다
+   (재전송 때 두 장이 되지 않게 하려는 장치). 그런데 아이폰 카메라는 사진 이름이 흔히 전부 image.jpg 라
+   2장째부터 「중복」 으로 처리되고, 앱은 성공으로 알고 지워 버렸습니다 — 오류 없이 사진이 사라짐.
+   이름은 찍는 순간 한 번만 정해져 임시저장·대기함에 그대로 남으므로, 재전송 때도 같은 이름이라
+   중복 막기는 그대로 작동합니다. */
+let _photoSeq = 0;
+function uniquePhotoName_(name) {
+  const base = String(name || 'photo.jpg').replace(/[\\/:*?"<>|\s]+/g, '_').slice(-60);
+  const tag = Date.now().toString(36) + (++_photoSeq).toString(36) + Math.random().toString(36).slice(2, 6);
+  return tag + '_' + base;
+}
+
 async function appendPhotos_(itemId, label, files) {
   if (!S.photoMap) S.photoMap = {};
   if (!S.photoMap[itemId]) S.photoMap[itemId] = [];
@@ -3648,7 +3712,7 @@ async function appendPhotos_(itemId, label, files) {
     if (!b64) continue;
     before += f.size;
     after  += dataUrlBytes(b64);
-    S.photoMap[itemId].push({ base64: b64, filename: f.name, label: label });
+    S.photoMap[itemId].push({ base64: b64, filename: uniquePhotoName_(f.name), label: label });
     saved++;
   }
   // 사진은 용량이 커서 유실 시 손해가 큽니다 — 디바운스 없이 바로 저장
@@ -4247,13 +4311,24 @@ function collectAllPhotos_(d) {
   const uploader = (d && d.점검자) || S.user?.name || '';
   const types = S.inspTypes || [];
   const thermalOnly = types.length > 0 && types.every(t => t === '열화상촬영');
+  /* 한 점검 안에서 파일명이 겹치지 않게 (2026-11-08 · 묶음 B V-1)
+     고유 이름(uniquePhotoName_)을 쓰기 전에 담아 둔 사진(아이폰 image.jpg 여러 장)과
+     이름이 없는 사진을 위해 겹치는 이름에만 순번을 붙입니다. 같은 사진 목록이면 늘 같은 이름이 나옵니다.
+     예전 대비 photo_${Date.now()} 는 한 번에 모은 사진이 전부 같은 이름이 돼 서버가 1장만 남겼습니다. */
+  const 쓴이름 = {};
+  const 이름정하기 = (name, itemId) => {
+    let n = String(name || ('photo_' + itemId + '.jpg'));
+    if (쓴이름[n]) { let k = 2; while (쓴이름[k + '_' + n]) k++; n = k + '_' + n; }
+    쓴이름[n] = true;
+    return n;
+  };
   Object.entries(S.photoMap || {}).forEach(([itemId, list]) => {
     (list || []).forEach(ph => {
       if (!ph || !ph.base64) return;
       const isThermal = /thermal/i.test(itemId) || thermalOnly;
       out.push({
         base64: ph.base64,
-        filename: ph.filename || `photo_${Date.now()}.jpg`,
+        filename: 이름정하기(ph.filename, itemId),
         no: siteNo,
         설비명칭: siteName,
         itemId: itemId,
@@ -4852,7 +4927,15 @@ const TIMEOUT_BY = {
   getSiteList:       30000,
   getSiteInspections:30000,
   getCheckItems:     30000,
-  getEquipInfo:      30000
+  getEquipInfo:      30000,
+  /* 사진 8장 묶음 — 드라이브 저장 8번 + PHOTO_LOG 쓰기라 약전계에서 15초를 넘깁니다 (2026-11-08 · 묶음 B P3)
+     예전에는 기본 15초에 걸려 앱이 실패로 보고 같은 8장을 계속 다시 보냈습니다(서버는 그사이 저장). */
+  flushPhotoQueue:  120000,
+  /* 시트를 읽는 조회 — 기본 15초로는 아침 첫 호출(콜드스타트)에 자주 끊겼습니다 */
+  loginByToken:      30000,
+  login:             30000,   // 이름+PIN (서버 loginByName_)
+  getPendingFaults:  30000,
+  getNotice:         30000
 };
 
 /** 지금 쓸 수 있는 토큰을 찾습니다 (로그인 결과 → 저장된 값 → 주소의 ?token=) */
@@ -4927,7 +5010,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '162e1ed3';
+  var BUILD = 'dc5aed30';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
