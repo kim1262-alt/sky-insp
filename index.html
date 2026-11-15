@@ -2894,7 +2894,14 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
           const lbl = escT_(ch.label || `No${ch.slot || i + 1}`);
           const cnt = Number(ch.count) || 0;
           h += `<div style="border:1.5px solid var(--border);border-radius:10px;padding:.6rem .7rem;margin-bottom:.5rem;background:#fafcff;">
-            <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">${lbl} <span class="ch-hint">${cnt}채널</span></div>`;
+            <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;display:flex;align-items:center;gap:.4rem;">
+              <span>${lbl} <span class="ch-hint">${cnt}채널</span></span>
+              <!-- 현장에서 이름·채널수를 바로 고치는 버튼 (2026-11-15)
+                   채널전류를 입력한다고 대장이 저절로 바뀌지는 않습니다(10-30 결정 그대로).
+                   점검자가 명판·접속함을 보고 【직접 눌러서】 고칠 때만 대장(두 시트)이 바뀌고 자취가 남습니다. -->
+              <button type="button" onclick="editChannel(${i})"
+                style="margin-left:auto;border:1.5px solid var(--border);border-radius:8px;padding:.15rem .55rem;background:#fff;font-size:.78rem;cursor:pointer;color:var(--pri);">✏️ 수정</button>
+            </div>`;
           chItems.forEach(item => {
             const u = item.단위 ? ` (${escT_(item.단위)})` : '';
             if (item.항목ID === 'ch_current' || /채널.*전류/.test(item.항목명)) {
@@ -2969,7 +2976,11 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
         const slot = ch.slot || i + 1;
         const lbl = ch.label || (isStr ? `INV${slot}` : `No${slot}`);
         html += `<div style="border:1.5px solid var(--border);border-radius:10px;padding:.6rem .7rem;margin-bottom:.5rem;background:#fafcff;">
-          <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;">${lbl} <span class="ch-hint">${ch.count}채널</span></div>`;
+          <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;display:flex;align-items:center;gap:.4rem;">
+            <span>${escT_(lbl)} <span class="ch-hint">${Number(ch.count) || 0}채널</span></span>
+            <button type="button" onclick="editChannel(${i})"
+              style="margin-left:auto;border:1.5px solid var(--border);border-radius:8px;padding:.15rem .55rem;background:#fff;font-size:.78rem;cursor:pointer;color:var(--pri);">✏️ 수정</button>
+          </div>`;
         if (isStr) {
           html += `<div class="row2" style="margin-bottom:.4rem;">
             <div class="fg" style="margin-bottom:0;"><label>누적발전량(kWh)</label>
@@ -4046,6 +4057,56 @@ async function validateCh(el, maxCnt, label, slot) {
                  + ' — 그대로 제출하면 기록에 남습니다';
   st.style.color = 'var(--ng)';
 }
+/* ✏️ 채널 묶음(접속반·스트링 인버터) 이름·채널수 고치기 (2026-11-15)
+     11-11 율린 3~6호: 대장의 이름이 밀려 있어(INV6 두 번·INV6(1)) 점검자가 특이사항에
+     「3-JB6:16->15수정」 처럼 적어 두고 관리자가 나중에 옮겨야 했습니다.
+     이제 현장에서 바로 고칩니다 — 서버 updateChannelCount_ 가 옛 대장·설비원장 두 곳에 쓰고
+     그 칸에 「누가·언제·전→후·까닭」 자취를 남깁니다.
+     ⚠️ 채널전류 입력만으로는 대장이 안 바뀝니다 (10-30 결정 — 6개만 잰 사실이 사라지지 않게).
+        점검자가 이 버튼으로 【확인하고】 고칠 때만 바뀝니다.
+     ⚠️ 통신이 될 때만 됩니다 — 대장을 바로 고치는 일이라 대기함에 쌓지 않습니다. */
+async function editChannel(i) {
+  const site  = S.currentSite;
+  const equip = S.currentEquip || {};
+  const ch = (equip.channels || [])[i];
+  if (!site || !ch) return;
+  if (!S.isOnline) {
+    toast('통신이 될 때만 고칠 수 있습니다 — 지금은 특이사항에 「번호·채널수」 를 적어 주세요', 4500);
+    return;
+  }
+  const 옛이름 = String(ch.label || '').trim();
+  const 옛수 = Number(ch.count) || 0;
+  const 이름입력 = prompt(`[${옛이름 || ('No' + ch.slot)}] 이름 — 인버터·접속함 번호 (예: INV5 · A-3)`, 옛이름);
+  if (이름입력 === null) return;
+  const 이름 = String(이름입력).trim();
+  const 수입력 = prompt(`[${이름 || 옛이름}] 채널(스트링) 수`, String(옛수 || ''));
+  if (수입력 === null) return;
+  const 수 = parseInt(String(수입력).trim(), 10);
+  if (!(수 >= 1 && 수 <= 60) || String(수) !== String(수입력).trim()) {
+    toast('채널 수는 1~60 사이 숫자로 적어 주세요', 3500);
+    return;
+  }
+  if (이름 === 옛이름 && 수 === 옛수) { toast('바뀐 것이 없습니다'); return; }
+  const 사유 = prompt('고친 까닭 (예: 명판 확인 · 접속함 번호 다시 셈)', '현장 확인');
+  if (사유 === null) return;
+  if (!confirm(`대장을 고칩니다\n\n${옛이름 || ('No' + ch.slot)} (${옛수}채널)\n→ ${이름 || ('No' + ch.slot)} (${수}채널)\n\n`
+             + `두 대장에 같이 적히고, 누가·언제 고쳤는지 남습니다.`)) return;
+
+  const r = await api('updateChannelCount', {
+    no: site.no, slot: ch.slot, newCount: 수, newLabel: 이름, 사유: String(사유).trim()
+  });
+  if (!r || !r.success) {
+    toast('❌ 못 고쳤습니다 — ' + ((r && r.error) || '통신 실패'), 4500);
+    return;
+  }
+  /* 화면·받아둔 설비정보도 같이 바꿉니다 — 안 바꾸면 다시 열 때 옛 값이 그려집니다 */
+  if (이름) ch.label = 이름;
+  ch.count = 수;
+  try { localStorage.setItem('equip_' + site.no, JSON.stringify(S.currentEquip)); } catch (_) {}
+  if (typeof rebuildFormKeepValues_ === 'function') await rebuildFormKeepValues_();
+  toast(`✅ 고쳤습니다 — ${ch.label || ('No' + ch.slot)} ${수}채널`, 3000);
+}
+
 function toggleAction(v) {
   document.getElementById('actionDetail').style.display = v==='없음'?'none':'block';
   document.getElementById('vendorWrap').style.display = v==='업체서비스요청'?'block':'none';
@@ -4935,7 +4996,9 @@ const TIMEOUT_BY = {
   loginByToken:      30000,
   login:             30000,   // 이름+PIN (서버 loginByName_)
   getPendingFaults:  30000,
-  getNotice:         30000
+  getNotice:         30000,
+  /* ✏️ 채널 수정 — 옛 대장·설비원장 두 시트에 쓰고 자취까지 남깁니다 (2026-11-15) */
+  updateChannelCount: 60000
 };
 
 /** 지금 쓸 수 있는 토큰을 찾습니다 (로그인 결과 → 저장된 값 → 주소의 ?token=) */
@@ -5010,7 +5073,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = 'dc5aed30';
+  var BUILD = 'de2c3812';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
