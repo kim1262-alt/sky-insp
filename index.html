@@ -327,6 +327,14 @@ input[type=number]{-moz-appearance:textfield;}
         <button class="btn btn-pri" style="margin-top:.75rem;" onclick="startInspection()">📝 점검 시작</button>
         <button class="btn" style="margin-top:.5rem;background:#fee2e2;color:#b91c1c;border:1.5px solid #fecaca;"
                 onclick="startEmergency()">🚨 긴급출동</button>
+        <!-- 📷 명판 사진만 찍기 (2026-11-15) — 값은 사무실 수용가 카드에서 사진을 보며 입력합니다.
+             점검 제출·점검 사진 대기함과 완전히 따로입니다 (통신될 때만 올림). -->
+        <button class="btn btn-out" style="margin-top:.5rem;" onclick="npOpen()">📷 명판 사진</button>
+      </div>
+
+<div class="pane" id="mt-np">
+        <button type="button" class="btn btn-out btn-sm" style="margin-bottom:.6rem;" onclick="switchMTab('info')">← 기본정보</button>
+        <div id="npEl"></div>
       </div>
 
 <div class="pane" id="mt-form">
@@ -2583,7 +2591,11 @@ function readFileAsDataUrl(file, cb) {
  * 사진 1장을 압축해 dataURL로 돌려줍니다.
  * 압축이 불가능하거나(HEIC 등 브라우저 미지원) 오히려 커지면 원본을 그대로 씁니다.
  */
-function compressImage(file) {
+/* opt — 명판처럼 작은 글자를 읽어야 하는 사진은 덜 줄입니다 (2026-11-15)
+     {maxSide, quality} · 안 주면 점검 사진 기본값(PHOTO_MAX_SIDE · PHOTO_QUALITY) */
+function compressImage(file, opt) {
+  var 최대변 = (opt && opt.maxSide) || PHOTO_MAX_SIDE;
+  var 품질 = (opt && opt.quality) || PHOTO_QUALITY;
   return new Promise(function(resolve) {
     if (!file || String(file.type || '').indexOf('image/') !== 0) {
       readFileAsDataUrl(file, resolve);
@@ -2597,7 +2609,7 @@ function compressImage(file) {
       try {
         var w = img.naturalWidth  || img.width;
         var h = img.naturalHeight || img.height;
-        var scale = Math.min(1, PHOTO_MAX_SIDE / Math.max(w, h));
+        var scale = Math.min(1, 최대변 / Math.max(w, h));
         var cw = Math.max(1, Math.round(w * scale));
         var chh = Math.max(1, Math.round(h * scale));
 
@@ -2605,7 +2617,7 @@ function compressImage(file) {
         canvas.width = cw; canvas.height = chh;
         canvas.getContext('2d').drawImage(img, 0, 0, cw, chh);
 
-        var out = canvas.toDataURL('image/jpeg', PHOTO_QUALITY);
+        var out = canvas.toDataURL('image/jpeg', 품질);
         URL.revokeObjectURL(url);
 
         // iOS는 캔버스 메모리를 늦게 회수합니다. 명시적으로 비워 압박을 줄입니다.
@@ -4107,6 +4119,91 @@ async function editChannel(i) {
   toast(`✅ 고쳤습니다 — ${ch.label || ('No' + ch.slot)} ${수}채널`, 3000);
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   📷 명판 사진 (2026-11-15) — 「어느 기기 · 몇 번」 고르고 찍어 올리기만
+   ══════════════════════════════════════════════════════════════════
+   값(시리얼·규격)은 사무실 🏠 수용가 카드에서 이 사진을 보며 넣습니다.
+   ⚠️ 점검과 섞지 않습니다 — S.photoMap · 대기함(submitQ/photoQ) · 임시저장 초안을 건드리지 않습니다.
+      통신이 될 때만 서버 uploadNameplate 로 바로 보냅니다.
+      통신이 없으면 폰 기본 카메라로 찍어 두고, 나중에 여기서 「사진첩에서 고르기」 로 올립니다. */
+const NP_KINDS = ['인버터', '접속반', '모듈', '변압기', 'VCB', 'ACB', '소내용계량기', '발전용계량기', '모름'];
+const NP_STATE = { kind: '', num: 0, done: [] };
+
+function npOpen() {
+  if (!S.currentSite) return;
+  NP_STATE.kind = ''; NP_STATE.num = 0; NP_STATE.done = [];
+  switchMTab('np');
+  npRender();
+}
+
+function npCount_(kind) {
+  const e = S.currentEquip || {};
+  if (kind === '인버터') return Number(e.인버터수량) || 1;
+  if (kind === '접속반') return (e.channels || []).length || 1;
+  if (kind === '변압기') return Number(e.변압기수량) || 1;
+  return 1;
+}
+
+function npRender() {
+  const el = document.getElementById('npEl');
+  if (!el) return;
+  const site = S.currentSite || {};
+  const 칩 = (on, label, js) => `<button type="button" onclick="${js}" style="padding:.45rem .7rem;border-radius:8px;font-size:.88rem;cursor:pointer;`
+    + (on ? 'border:1.5px solid var(--pri);background:#eef4ff;color:var(--pri);font-weight:700;' : 'border:1.5px solid var(--border);background:#fff;') + `">${escT_(label)}</button>`;
+  let h = `<div style="font-weight:700;margin-bottom:.2rem;">📷 ${escT_(site.name || '')} · 명판 사진</div>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.6rem;">시리얼·규격은 사무실에서 이 사진을 보며 넣습니다. 글자가 또렷하게 나오게 찍어 주세요.</div>
+    <div style="font-size:.83rem;font-weight:700;margin-bottom:.3rem;">어느 기기?</div>
+    <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.7rem;">`;
+  NP_KINDS.forEach(k => { h += 칩(NP_STATE.kind === k, k, `npKind('${escAttr(k)}')`); });
+  h += `</div>`;
+  if (NP_STATE.kind && NP_STATE.kind !== '모름') {
+    const n = Math.min(Math.max(npCount_(NP_STATE.kind) + 1, 2), 20);
+    h += `<div style="font-size:.83rem;font-weight:700;margin-bottom:.3rem;">몇 번?</div><div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.7rem;">`;
+    for (let i = 1; i <= n; i++) h += 칩(NP_STATE.num === i, String(i), `npNum(${i})`);
+    h += `</div>`;
+  }
+  const 고름 = NP_STATE.kind === '모름' || (NP_STATE.kind && NP_STATE.num);
+  const 이름 = NP_STATE.kind === '모름' ? '어느 기기인지 모르는 명판' : `${NP_STATE.kind} ${NP_STATE.num || ''}번`;
+  h += `<label style="display:block;text-align:center;padding:1rem;border:1.5px dashed ${고름 ? 'var(--pri)' : 'var(--border)'};border-radius:10px;
+          background:${고름 ? '#f5f9ff' : '#f8fafc'};color:${고름 ? 'var(--pri)' : 'var(--muted)'};font-weight:700;cursor:${고름 ? 'pointer' : 'default'};">
+          ${고름 ? `📷 ${escT_(이름)} 찍기 / 사진첩에서 고르기` : '먼저 기기와 번호를 고르세요'}
+          <input type="file" accept="image/*" multiple style="display:none" ${고름 ? '' : 'disabled'} onchange="npFiles(this)">
+        </label>
+        <div id="npMsg" style="font-size:.82rem;margin-top:.5rem;"></div>`;
+  if (NP_STATE.done.length) {
+    h += `<div style="margin-top:.6rem;font-size:.83rem;"><b>올린 것</b> — ${NP_STATE.done.map(escT_).join(' · ')}</div>`;
+  }
+  el.innerHTML = h;
+}
+
+function npKind(k) { NP_STATE.kind = k; NP_STATE.num = (k === '모름') ? 0 : 0; npRender(); }
+function npNum(n)  { NP_STATE.num = n; npRender(); }
+
+async function npFiles(input) {
+  const files = Array.from(input.files || []);
+  input.value = '';
+  if (!files.length) return;
+  const site = S.currentSite;
+  const msg = (t, bad) => { const m = document.getElementById('npMsg'); if (m) { m.textContent = t; m.style.color = bad ? 'var(--ng)' : 'var(--muted)'; } };
+  if (!S.isOnline) {
+    msg('통신이 안 됩니다 — 폰 기본 카메라로 찍어 두었다가, 통신되는 곳에서 여기서 사진첩으로 골라 올려 주세요.', true);
+    return;
+  }
+  const kind = NP_STATE.kind, num = NP_STATE.kind === '모름' ? 0 : NP_STATE.num;
+  let 성공 = 0, 실패 = 0, 덧말 = '';
+  for (let i = 0; i < files.length; i++) {
+    msg(`올리는 중… ${i + 1}/${files.length}`);
+    const dataUrl = await compressImage(files[i], { maxSide: 2400, quality: 0.85 });
+    if (!dataUrl) { 실패++; continue; }
+    const r = await api('uploadNameplate', { no: site.no, 종류: kind, 번호: num, dataUrl: dataUrl });
+    if (r && r.success) { 성공++; if (r.말) 덧말 = r.말; }
+    else { 실패++; 덧말 = (r && r.error) || '통신 실패'; }
+  }
+  if (성공) NP_STATE.done.push((kind === '모름' ? '모름' : kind + ' ' + num) + (성공 > 1 ? ` (${성공}장)` : ''));
+  npRender();
+  msg((성공 ? `✅ ${성공}장 올렸습니다` : '') + (실패 ? ` · ❌ ${실패}장 실패` : '') + (덧말 ? ` — ${덧말}` : ''), 실패 > 0);
+}
+
 function toggleAction(v) {
   document.getElementById('actionDetail').style.display = v==='없음'?'none':'block';
   document.getElementById('vendorWrap').style.display = v==='업체서비스요청'?'block':'none';
@@ -4941,7 +5038,7 @@ function toggleMgr(gi) {
 
 function switchMTab(name) {
   // 사진 탭 제거 후 기본정보 / 점검폼 2개만 남았습니다 (H-3)
-  ['info','form'].forEach(t => {
+  ['info','form','np'].forEach(t => {          // np = 📷 명판 사진 (2026-11-15)
     document.getElementById(`mt-${t}`)?.classList.toggle('active', t===name);
   });
   if (name === 'form' && !document.getElementById('formEl').innerHTML) {
@@ -4998,7 +5095,9 @@ const TIMEOUT_BY = {
   getPendingFaults:  30000,
   getNotice:         30000,
   /* ✏️ 채널 수정 — 옛 대장·설비원장 두 시트에 쓰고 자취까지 남깁니다 (2026-11-15) */
-  updateChannelCount: 60000
+  updateChannelCount: 60000,
+  /* 📷 명판 사진 한 장 (덜 줄여 1~2MB) — 드라이브 저장 + 설비원장 링크 (2026-11-15) */
+  uploadNameplate:   90000
 };
 
 /** 지금 쓸 수 있는 토큰을 찾습니다 (로그인 결과 → 저장된 값 → 주소의 ?token=) */
@@ -5073,7 +5172,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = 'de2c3812';
+  var BUILD = 'f42bcb3e';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
