@@ -127,6 +127,8 @@ textarea{min-height:72px;resize:vertical;}
 /* 채널 칩 — 입력한 값을 칸별로 보여 줍니다 (평균의 70% 미만 주황) · 🎲 자동입력도 그대로 칩에 나옵니다 */
 .ch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:5px;margin-top:.45rem;}
 .ch-cell{border-radius:8px;background:#fff;border:1.5px solid var(--border);text-align:center;padding:2px 0 3px;}
+.ch-cell[data-k]{cursor:pointer;-webkit-tap-highlight-color:transparent;}
+.ch-cell[data-k]:active{transform:scale(.94);border-color:#2563eb;}
 .ch-cell i{display:block;font-style:normal;font-size:.72rem;color:var(--muted);line-height:1.2;}
 .ch-cell b{display:block;font-size:.92rem;font-family:ui-monospace,monospace;line-height:1.3;}
 .ch-cell.ok{border-color:#bbf7d0;background:var(--ok-50);}
@@ -479,6 +481,19 @@ input[type=number]{-moz-appearance:textfield;}
 </div>
 
 <!-- ✏️ 채널 이름·수 고치기 (2026-11-25) — prompt() 를 막는 브라우저(앱 안 브라우저·일부 웹뷰)가 있어 화면 안 창으로 바꿈 -->
+<!-- 채널 칩 한 칸 고치기 (2026-11-26) — 칩을 누르면 그 채널 값만 고칩니다 -->
+<div class="mf-sheet-bg" id="chCellBg" style="z-index:410;" onclick="if(event.target===this)closeChCell()">
+  <div class="mf-sheet">
+    <h3 id="chCellTitle">채널 값 고치기</h3>
+    <p class="lead" id="chCellLead"></p>
+    <div class="fg"><label>전류 (A)</label>
+      <input type="text" id="chCellVal" inputmode="decimal" autocomplete="off"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();saveChCell(0);}"></div>
+    <div class="mf-sheet-act">
+      <button type="button" class="btn btn-out" onclick="closeChCell()">취소</button>
+      <button type="button" class="btn btn-out" id="chCellPrev" onclick="saveChCell(-1)">◀ 저장·앞</button>
+      <button type="button" class="btn btn-out" id="chCellNext" onclick="saveChCell(1)">저장·다음 ▶</button>
+      <button type="button" class="btn btn-pri" onclick="saveChCell(0)">저장</button></div></div></div>
 <div class="mf-sheet-bg" id="chEditBg" style="z-index:410;" onclick="if(event.target===this)closeChEdit()">
   <div class="mf-sheet">
     <h3>✏️ 채널 고치기</h3>
@@ -5634,9 +5649,91 @@ function renderChGrid_(el) {
     } else if (k >= max) {
       continue;
     }
-    cells.push('<div class="ch-cell ' + cls + '"><i>' + (k + 1) + '</i><b>' + escT_(txt) + '</b></div>');
+    cells.push('<div class="ch-cell ' + cls + '" data-k="' + k + '" role="button" tabindex="0"><i>' + (k + 1) + '</i><b>' + escT_(txt) + '</b></div>');
   }
   host.innerHTML = cells.join('');
+}
+
+/* ── 채널 칩 눌러 한 칸만 고치기 (2026-11-26 사장님 요청) ──
+     긴 입력줄에서 5번째 값만 찾아 고치기가 어려워, 칩을 누르면 작은 창에서 그 값만 고칩니다.
+     ⚠️ 입력줄에서 값을 지우면 「//」 가 생기고 autoSlash 가 「/」 하나로 합쳐 뒤 채널이 전부 한 칸씩 당겨집니다.
+        그래서 여기서는 빈 값으로 저장할 수 없고, 숫자만 받습니다.
+     아직 안 적은 칸(·)은 바로 다음 칸만 받습니다 — 사이를 건너뛰면 빈 칸이 생겨 같은 문제가 납니다. */
+document.addEventListener('click', function (e) {
+  const cell = e.target && e.target.closest && e.target.closest('.ch-grid .ch-cell[data-k]');
+  if (!cell) return;
+  const grid = cell.parentElement;
+  const inp = grid && document.getElementById(grid.id.replace(/^chg_/, 'ch_'));
+  if (!inp) return;
+  openChCell_(inp.id, Number(cell.dataset.k));
+});
+
+function chParts_(inp) {
+  return String(inp.value || '') === '' ? [] : String(inp.value).split('/');
+}
+
+// 입력칸 id 「ch_i」 의 i 는 equip.channels 배열 순서입니다 (N-1) — 이름(INV1·A-3)을 거기서 읽습니다
+function chCellLabel_(inp) {
+  const i = Number(String(inp.id).replace(/^ch_/, ''));
+  const ch = ((S.currentEquip || {}).channels || [])[i];
+  return ch && ch.label ? String(ch.label) : '';
+}
+
+function openChCell_(inpId, k) {
+  const inp = document.getElementById(inpId);
+  if (!inp) return;
+  const parts = chParts_(inp);
+  const max = Number(inp.dataset.max) || 0;
+  if (k > parts.length) {
+    toast(`${parts.length + 1}번 채널부터 차례로 적어 주세요 (사이를 비울 수 없습니다)`);
+    return;
+  }
+  S.chCell = { inpId: inpId, k: k };
+  const nm = chCellLabel_(inp);
+  document.getElementById('chCellTitle').textContent = (nm ? nm + ' · ' : '') + (k + 1) + '번 채널';
+  document.getElementById('chCellLead').textContent = k < parts.length
+    ? `지금 값 ${String(parts[k]).trim() || '(빈칸)'} — 고칠 값을 적으세요`
+    : '아직 안 적은 채널입니다 — 값을 적으세요';
+  const v = document.getElementById('chCellVal');
+  v.value = k < parts.length ? String(parts[k]).trim() : '';
+  document.getElementById('chCellPrev').disabled = !chCanGo_(k - 1, parts.length, max);
+  // 저장하면 적힌 칸이 적어도 k+1 개가 되므로 그 기준으로 봅니다
+  document.getElementById('chCellNext').disabled = !chCanGo_(k + 1, Math.max(parts.length, k + 1), max);
+  document.getElementById('chCellBg').classList.add('show');
+  setTimeout(() => { try { v.focus(); v.select(); } catch (_) {} }, 60);
+}
+
+function closeChCell() {
+  document.getElementById('chCellBg')?.classList.remove('show');
+  S.chCell = null;
+}
+
+function saveChCell(step) {
+  const c = S.chCell;
+  const inp = c && document.getElementById(c.inpId);
+  if (!inp) { closeChCell(); return; }
+  const raw = String(document.getElementById('chCellVal').value || '').trim().replace(/,/g, '.');
+  if (!/^\d+(\.\d+)?$/.test(raw)) {
+    toast('숫자만 적을 수 있습니다 (예: 4.9) — 빈칸으로는 저장되지 않습니다');
+    return;
+  }
+  const parts = chParts_(inp);
+  if (c.k < parts.length) parts[c.k] = raw;
+  else if (c.k === parts.length) parts.push(raw);
+  else { toast('앞 채널부터 차례로 적어 주세요'); return; }
+  inp.value = parts.join('/');
+  inp.dispatchEvent(new Event('input', { bubbles: true }));   // 칩·진행률·임시저장
+  const nk = c.k + step;
+  if (step && chCanGo_(nk, parts.length, Number(inp.dataset.max) || 0)) {
+    openChCell_(c.inpId, nk);
+    return;
+  }
+  closeChCell();
+}
+
+/* 갈 수 있는 칸: 0 이상 · 적힌 칸이거나 바로 다음 빈칸 · 채널수(또는 이미 적힌 수) 안 */
+function chCanGo_(k, len, max) {
+  return k >= 0 && k <= len && k < Math.max(max, len);
 }
 
 /* 3상 입력 아래 A·B·C 나눠 보기 */
@@ -5853,7 +5950,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = 'c831137f';
+  var BUILD = '8d3ad553';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
