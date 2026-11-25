@@ -2,13 +2,16 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🌞 수용가 점검 시스템</title>
 <style>
 :root {
   --pri:#2563eb; --pri-d:#1e40af; --ok:#16a34a; --ng:#dc2626;
   --warn:#d97706; --bg:#f1f5f9; --card:#fff; --border:#e2e8f0;
-  --text:#1e293b; --muted:#64748b;
+  --text:#1e293b; --muted:#5b6b80;
+  /* 점검폼 v2 (2026-11-25) — 하나의 색 = 하나의 뜻 */
+  --pri-50:#eff6ff; --ok-50:#f0fdf4; --ng-50:#fef2f2; --warn-50:#fff7ed;
+  --edit:#7c3aed; --line:#edf1f5; --sub:#334155;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Noto Sans KR','Apple SD Gothic Neo',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
@@ -50,38 +53,69 @@ textarea{min-height:72px;resize:vertical;}
 .btn-out{background:#fff;color:var(--pri);border:2px solid var(--pri);}
 .btn-warn{background:var(--warn);color:#fff;}
 .btn:disabled{opacity:.45;cursor:not-allowed;}
-.btn-sm{width:auto;padding:.4rem .9rem;font-size:.82rem;}
+.btn-sm{width:auto;padding:.4rem .9rem;font-size:.82rem;min-height:40px;}
+/* 작은 보조 버튼 (주소복사·회차수정·+추가/−제거·✏️수정 등) — 인라인 12px 대신 (2026-11-25) */
+.btn-chip{min-height:40px;padding:0 .8rem;border:1.5px solid var(--border);border-radius:10px;background:#fff;
+  font-size:.88rem;font-weight:700;color:var(--pri);cursor:pointer;white-space:nowrap;}
+.btn-chip.ng{color:var(--ng);background:#fff5f5;}
 
-/* O/X/△ */
-.ox-table{display:flex;flex-direction:column;gap:.25rem;}
-.ox-row{display:flex;justify-content:space-between;align-items:center;padding:.45rem .2rem;border-bottom:1px solid #f1f5f9;}
-.ox-row span{font-size:.88rem;flex:1;padding-right:.5rem;}
-.ox-cam{display:flex;align-items:center;gap:.4rem;}
-.ox-grp{display:flex;gap:.3rem;}
-.ox-btn{width:42px;height:42px;border-radius:8px;border:2px solid var(--border);font-size:.95rem;font-weight:700;cursor:pointer;background:#fff;}
-.ox-btn.o{color:var(--ok);border-color:var(--ok);}
-.ox-btn.x{color:var(--ng);border-color:var(--ng);}
-.ox-btn.t{color:var(--warn);border-color:var(--warn);}
-.ox-btn.o.sel{background:var(--ok);color:#fff;}
-.ox-btn.x.sel{background:var(--ng);color:#fff;}
-.ox-btn.t.sel{background:var(--warn);color:#fff;}
-/* 해당없음(/) 버튼 */
-.ox-btn.na{color:var(--muted);border-color:var(--muted);font-size:.82rem;}
-.ox-btn.na.sel{background:var(--muted);color:#fff;}
-/* X 선택 시 메모/사진 영역 */
-.ox-detail{display:none;margin:0 0 .4rem .2rem;}
-.ox-detail-inner{background:#fff5f5;border:1.5px solid #fecaca;border-radius:8px;padding:.6rem .75rem;border-top:none;border-top-left-radius:0;border-top-right-radius:0;}
-/* ox-row 이름+배지 레이아웃 */
-.ox-name{display:flex;flex-direction:column;gap:.2rem;flex:1;min-width:0;}
-.ox-name span{font-size:.88rem;line-height:1.35;}
+/* ── O/X 한 줄 = 이름 줄 + 버튼 줄 (2026-11-25 점검폼 v2) ──
+     처음에는 아무것도 안 고른 상태(회색)입니다. 제출할 때 안 고른 칸만 O 로 채웁니다. */
+.ox-table{display:flex;flex-direction:column;}
+.ox-row{display:block;padding:.65rem .2rem .85rem;border-bottom:1px solid var(--line);}
+.ox-row:last-child{border-bottom:none;}
+.ox-row.v-X{background:#fffafa;}
+.ox-top{display:flex;align-items:flex-start;gap:.6rem;margin-bottom:.55rem;}
+.ox-name{display:flex;flex-direction:column;gap:.25rem;flex:1;min-width:0;}
+.ox-name .ox-nm{font-size:1rem;line-height:1.45;padding-top:.2rem;}
+.ox-grp{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:.5rem;}
+.ox-btn{width:auto;height:48px;border-radius:10px;border:2px solid var(--border);font-size:1.15rem;font-weight:800;cursor:pointer;background:#fff;}
+.ox-btn small{font-size:.78rem;font-weight:700;margin-left:.25rem;}
+.ox-btn.o{color:var(--ok);}
+.ox-btn.x{color:var(--ng);}
+.ox-btn.t{color:var(--warn);}
+.ox-btn.na{color:#64748b;}
+.ox-btn.o.sel{background:var(--ok);border-color:var(--ok);color:#fff;}
+.ox-btn.x.sel{background:var(--ng);border-color:var(--ng);color:#fff;}
+.ox-btn.t.sel{background:var(--warn);border-color:var(--warn);color:#fff;}
+.ox-btn.na.sel{background:#64748b;border-color:#64748b;color:#fff;}
+/* X 를 고르면 「불량 내용」 칸이 열립니다 — 제출 때 「불량내용」 열에 [항목명] 내용 으로 모입니다 */
+.ox-detail{display:none;margin-top:.6rem;background:var(--ng-50);border:1.5px solid #fecaca;border-radius:10px;padding:.6rem;}
+.ox-row.v-X .ox-detail{display:block;}
+.ox-detail label{font-size:.86rem;font-weight:800;color:#991b1b;}
+.ox-detail textarea{min-height:64px;border-color:#fecaca;font-size:1rem;}
+/* 월차 도구줄 · 섹션 제목 */
+.ox-tool{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.4rem 0 .6rem;border-bottom:1px solid var(--line);}
+.all-ok-btn{height:44px;padding:0 1rem;border:none;border-radius:10px;font-size:.95rem;font-weight:800;cursor:pointer;background:var(--ok);color:#fff;}
+.ox-legend{display:flex;gap:.6rem;flex-wrap:wrap;font-size:.84rem;color:var(--muted);}
+.ox-legend b{font-weight:800;}
+.grp-t{display:flex;align-items:center;gap:.5rem;font-size:.86rem;font-weight:800;color:var(--sub);padding:.85rem 0 .2rem;}
+.grp-t::before{content:"";width:3px;height:14px;background:var(--pri);border-radius:2px;}
 /* 필수 사진 배지 */
-.photo-req-badge{font-size:.72rem;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;
-  border-radius:6px;padding:1px 6px;display:inline-flex;align-items:center;gap:.2rem;width:fit-content;}
-.photo-req-badge.satisfied{color:#166534;background:#dcfce7;border-color:#86efac;}
-/* 카메라 버튼 사진 수 배지 */
-.cam-count{font-size:.72rem;font-weight:700;}
-.cam-btn{width:36px;height:36px;border-radius:8px;border:1.5px solid var(--border);background:#f8fafc;font-size:1rem;cursor:pointer;}
-.cam-btn.done{border-color:var(--ok);background:#f0fdf4;}
+.photo-req-badge{font-size:.8rem;font-weight:700;color:#92400e;background:#fef3c7;border-radius:6px;padding:1px 8px;width:fit-content;}
+.photo-req-badge.satisfied{color:#166534;background:#dcfce7;}
+/* 카메라 버튼 — 📷 찍은수/필요수 */
+.cam-count{font-size:.85rem;font-weight:800;margin-left:.15rem;}
+.cam-btn{min-width:56px;height:44px;border-radius:10px;border:1.5px solid var(--border);background:#f8fafc;font-size:1.05rem;cursor:pointer;color:var(--sub);flex:none;}
+.cam-btn.done{border-color:var(--ok);background:var(--ok-50);color:#166534;}
+.cam-btn.short{border-color:#f59e0b;background:#fffbeb;color:#92400e;}
+
+/* ── 점검구분 아코디언 — 체크(☑) = 제출에 포함 · 제목 = 펼치기 (2026-11-25) ── */
+.acc-sec{background:#fff;border:1.5px solid var(--border);border-radius:14px;margin:.5rem 0;overflow:hidden;}
+.acc-sec.on{border-color:var(--pri);}
+.acc-hdr{display:flex;align-items:stretch;min-height:56px;}
+.acc-check{width:56px;flex:none;display:flex;align-items:center;justify-content:center;border:none;border-right:1px solid var(--line);background:none;cursor:pointer;}
+.acc-box{width:26px;height:26px;border-radius:7px;border:2px solid #b6c2d1;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.95rem;font-weight:800;}
+.acc-sec.on .acc-box{background:var(--pri);border-color:var(--pri);}
+.acc-tg{flex:1;display:flex;align-items:center;gap:.6rem;padding:0 .9rem;border:none;background:none;cursor:pointer;text-align:left;font:inherit;color:inherit;}
+.acc-nm{flex:1;font-weight:800;font-size:1.02rem;}
+.acc-sec:not(.on) .acc-nm{color:var(--muted);}
+.acc-cnt{font-size:.85rem;font-weight:700;color:var(--muted);background:var(--line);border-radius:999px;padding:2px 10px;white-space:nowrap;}
+.acc-cnt.done{background:#dcfce7;color:#166534;}
+.acc-cnt:empty{display:none;}
+.acc-chev{color:var(--muted);font-size:.9rem;}
+.acc-body{border-top:1px solid var(--line);padding:.3rem .8rem .6rem;}
+.acc-off{font-size:.88rem;color:var(--muted);background:#f8fafc;border-radius:8px;padding:.6rem .7rem;margin:.4rem 0;}
 
 /* 채널 전류 */
 .ch-wrap{display:flex;flex-direction:column;gap:.6rem;}
@@ -89,7 +123,68 @@ textarea{min-height:72px;resize:vertical;}
 .ch-lbl{font-weight:600;font-size:.87rem;margin-bottom:.35rem;display:flex;justify-content:space-between;}
 .ch-hint{font-weight:400;color:var(--muted);font-size:.78rem;}
 .ch-input{font-family:monospace;letter-spacing:.04em;font-size:.95rem;}
-.ch-status{font-size:.78rem;margin-top:.25rem;min-height:1rem;}
+.ch-status{font-size:.86rem;margin-top:.25rem;min-height:1rem;font-weight:600;}
+/* 채널 칩 — 입력한 값을 칸별로 보여 줍니다 (평균의 70% 미만 주황) · 🎲 자동입력도 그대로 칩에 나옵니다 */
+.ch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:5px;margin-top:.45rem;}
+.ch-cell{border-radius:8px;background:#fff;border:1.5px solid var(--border);text-align:center;padding:2px 0 3px;}
+.ch-cell i{display:block;font-style:normal;font-size:.72rem;color:var(--muted);line-height:1.2;}
+.ch-cell b{display:block;font-size:.92rem;font-family:ui-monospace,monospace;line-height:1.3;}
+.ch-cell.ok{border-color:#bbf7d0;background:var(--ok-50);}
+.ch-cell.low{border-color:#fdba74;background:var(--warn-50);}
+.ch-cell.low b{color:#c2410c;}
+.ch-cell.over{border-color:#fca5a5;background:var(--ng-50);}
+.ch-cell.over b{color:var(--ng);}
+.ch-cell.wait b{color:#cbd5e1;}
+/* 3상 — 입력칸 아래 A·B·C 로 나눠 보여 줌 */
+.ph-set{margin-bottom:.5rem;}
+.ph-line{display:flex;gap:.5rem;align-items:center;}
+.ph-split{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:.3rem 0 0 3.1rem;}
+.ph-split span{font-size:.84rem;background:#fff;border:1px solid var(--border);border-radius:8px;padding:2px 8px;font-family:ui-monospace,monospace;}
+.ph-split span em{font-style:normal;color:var(--muted);font-weight:700;margin-right:.3rem;font-family:inherit;}
+.sub-hd{display:flex;justify-content:space-between;align-items:center;gap:.4rem;margin:.75rem 0 .35rem;}
+.sub-hd > span{font-size:.88rem;font-weight:700;color:var(--sub);}
+.sub-hd > span small{font-weight:400;font-size:.8rem;color:var(--muted);}
+
+/* ── 점검폼 고정 머리 · 진행률 · 하단 제출 바 · 제출 확인 (2026-11-25) ── */
+.mf-hdr{position:sticky;top:0;z-index:20;background:#fff;margin:-1rem -1.1rem .75rem;padding:.5rem .6rem .4rem;border-bottom:1px solid var(--border);border-radius:12px 12px 0 0;}
+.mf-hdr-top{display:flex;align-items:center;gap:.3rem;min-height:48px;}
+.mf-icon{width:44px;height:44px;flex:none;border:none;background:none;border-radius:10px;font-size:1.35rem;color:var(--sub);cursor:pointer;}
+.mf-title{flex:1;min-width:0;font-size:1.04rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mf-prog{padding:0 .5rem .3rem;}
+.mf-prog-bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;}
+.mf-prog-bar i{display:block;height:100%;width:0;background:var(--pri);border-radius:4px;transition:width .25s;}
+.mf-prog-txt{display:flex;justify-content:space-between;font-size:.84rem;color:var(--muted);margin-top:.25rem;}
+.mf-prog-txt b{color:var(--text);}
+.mf-bar{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:min(720px,100%);z-index:210;background:#fff;
+  border-top:1px solid var(--border);padding:.6rem .75rem calc(.6rem + env(safe-area-inset-bottom));display:flex;align-items:center;gap:.6rem;box-shadow:0 -6px 20px rgba(15,23,42,.06);}
+.mf-bar-sum{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:.2rem .6rem;font-size:.86rem;font-weight:700;}
+.mf-bar-sum .w{color:#b45309;} .mf-bar-sum .e{color:var(--ng);} .mf-bar-sum .g{color:var(--ok);} .mf-bar-sum .m{color:var(--muted);font-weight:600;}
+.mf-bar .btn-ok{width:auto;flex:none;height:52px;padding:0 1.3rem;border-radius:12px;background:var(--pri);font-size:1.05rem;font-weight:800;margin:0;}
+#mt-form{padding-bottom:90px;}
+.mf-sheet-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:400;display:none;align-items:flex-end;justify-content:center;}
+.mf-sheet-bg.show{display:flex;}
+.mf-sheet{width:min(720px,100%);max-height:85vh;overflow-y:auto;background:#fff;border-radius:20px 20px 0 0;padding:.5rem 1rem calc(1rem + env(safe-area-inset-bottom));}
+.mf-sheet h3{font-size:1.15rem;font-weight:800;margin:.6rem 0 .2rem;}
+.mf-sheet .lead{font-size:.92rem;color:var(--muted);margin-bottom:.7rem;}
+.mf-sum{list-style:none;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:.9rem;}
+.mf-sum li{display:flex;gap:.6rem;padding:.7rem .85rem;border-bottom:1px solid var(--line);font-size:.96rem;align-items:flex-start;}
+.mf-sum li:last-child{border-bottom:none;}
+.mf-sum .dot{width:10px;height:10px;border-radius:50%;margin-top:.45rem;flex:none;}
+.mf-sum .go{margin-left:auto;border:none;background:none;color:var(--pri);font-weight:700;font-size:.9rem;white-space:nowrap;min-height:32px;cursor:pointer;}
+.mf-sheet-act{display:grid;grid-template-columns:1fr 1.4fr;gap:.5rem;}
+.mf-sheet-act .btn{margin:0;height:52px;font-size:1rem;}
+.mf-flash{animation:mfFlash 1.2s;}
+@keyframes mfFlash{0%,100%{box-shadow:none}30%{box-shadow:0 0 0 3px #fbbf24 inset}}
+/* 기본정보(일자·시각·회차) 한 줄 요약 — 누르면 펼쳐 고침 */
+.mf-basic{border:1px solid var(--border);border-radius:12px;margin-bottom:.75rem;background:#fff;}
+.mf-basic > summary{list-style:none;display:flex;align-items:center;gap:.6rem;padding:.7rem .85rem;min-height:52px;cursor:pointer;}
+.mf-basic > summary::-webkit-details-marker{display:none;}
+.mf-basic-chips{flex:1;display:flex;flex-wrap:wrap;gap:.2rem .8rem;font-size:.98rem;font-weight:600;}
+.mf-basic-link{color:var(--pri);font-weight:700;font-size:.9rem;}
+.mf-basic-ed{padding:.2rem .85rem .4rem;border-top:1px solid var(--line);}
+/* 수정 모드 — 보라 띠 (미결사항 주황과 나눔) */
+.edit-band{background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:10px;padding:.7rem .9rem;margin-bottom:.7rem;}
+.edit-band b{color:var(--edit);}
 
 /* 인버터/변압기 동적 */
 .dyn-row{display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;}
@@ -119,10 +214,14 @@ textarea{min-height:72px;resize:vertical;}
 .pane.active{display:block;}
 
 /* 미결사항 배너 */
-.pending-banner{background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:.75rem;margin-bottom:.75rem;}
-.pending-banner h3{color:var(--warn);font-size:.88rem;margin-bottom:.5rem;}
-.pending-item{padding:.4rem 0;border-bottom:1px solid #fde68a;font-size:.84rem;}
-.pending-item:last-child{border:none;}
+.pending-banner{background:var(--warn-50);border:1.5px solid #fdba74;border-radius:12px;margin-bottom:.75rem;overflow:hidden;}
+.pb-hd{width:100%;display:flex;align-items:center;gap:.6rem;padding:.6rem .85rem;min-height:52px;border:none;background:none;cursor:pointer;text-align:left;font:inherit;}
+.pb-n{background:var(--warn);color:#fff;font-weight:800;font-size:.9rem;border-radius:999px;min-width:26px;height:26px;display:flex;align-items:center;justify-content:center;padding:0 8px;flex:none;}
+.pb-ttl{flex:1;font-weight:700;color:#9a3412;}
+.pb-bd{display:none;padding:0 .85rem .7rem;}
+.pending-banner.open .pb-bd{display:block;}
+.pending-item{padding:.6rem;background:#fff;border-radius:10px;margin-top:.4rem;font-size:.95rem;}
+.pending-item .btn-sm{min-height:44px;}
 
 /* 모달 */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;overflow-y:auto;}
@@ -130,7 +229,7 @@ textarea{min-height:72px;resize:vertical;}
 .modal-inner{max-width:720px;margin:1rem auto;padding:0 .5rem;}
 
 /* 토스트 */
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:.65rem 1.4rem;border-radius:8px;font-size:.88rem;z-index:999;display:none;max-width:90vw;text-align:center;}
+.toast{position:fixed;bottom:calc(96px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:.65rem 1.4rem;border-radius:8px;font-size:.92rem;z-index:999;display:none;max-width:90vw;text-align:center;white-space:pre-line;}
 .toast.show{display:block;animation:fadeUp .25s;}
 @keyframes fadeUp{from{opacity:0;transform:translate(-50%,12px)}to{opacity:1;transform:translate(-50%,0)}}
 
@@ -169,21 +268,14 @@ textarea{min-height:72px;resize:vertical;}
 .admin-notice-panel{background:#fff3cd;border:1.5px solid #ffc107;border-radius:10px;padding:.85rem;margin-bottom:.75rem;}
 .admin-notice-panel h4{font-size:.88rem;font-weight:700;color:#856404;margin-bottom:.6rem;}
 
-/* 전체양호 버튼 */
-.all-ok-bar{display:flex;align-items:center;gap:.6rem;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:.6rem .9rem;margin-bottom:.6rem;}
-.all-ok-bar span{font-size:.85rem;color:#166534;font-weight:600;flex:1;}
-.all-ok-btn{padding:.45rem 1rem;border:none;border-radius:8px;font-size:.88rem;font-weight:700;cursor:pointer;background:var(--ok);color:#fff;}
-.all-ok-btn.active{background:#166534;}
-
 /* 사진 그리드 */
 .photo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.4rem;margin-top:.5rem;}
 .photo-thumb{aspect-ratio:1;border-radius:6px;overflow:hidden;position:relative;background:#f1f5f9;}
 .photo-thumb img{width:100%;height:100%;object-fit:cover;}
-.photo-thumb .del-btn{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;line-height:20px;text-align:center;}
+.photo-thumb .del-btn{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;line-height:28px;text-align:center;}
 
 @media(max-width:480px){
   .row2,.row3{grid-template-columns:1fr;}
-  .ox-btn{width:40px;height:40px;}
   .photo-grid{grid-template-columns:repeat(3,1fr);}
 }
 input[type=number]::-webkit-inner-spin-button,
@@ -313,9 +405,18 @@ input[type=number]{-moz-appearance:textfield;}
 <div class="modal-bg" id="inspModal">
   <div class="modal-inner">
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
-        <span id="modalTitle" style="font-size:1rem;font-weight:700;"></span>
-        <button onclick="closeModal()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--muted);">✕</button>
+      <!-- 고정 머리 (2026-11-25 점검폼 v2) — 내려도 발전소 이름·닫기·진행률이 늘 보입니다.
+           ‹ 와 진행률은 점검폼 탭에서만 보입니다 (switchMTab 이 켜고 끔). -->
+      <div class="mf-hdr" id="mfHdr">
+        <div class="mf-hdr-top">
+          <button type="button" class="mf-icon" id="mfBack" aria-label="기본정보로" onclick="switchMTab('info')" style="display:none;">‹</button>
+          <span id="modalTitle" class="mf-title"></span>
+          <button type="button" class="mf-icon" aria-label="닫기" onclick="closeModal()">✕</button>
+        </div>
+        <div class="mf-prog" id="mfProg" style="display:none;">
+          <div class="mf-prog-bar"><i id="mfProgFill"></i></div>
+          <div class="mf-prog-txt"><span id="mfProgL"></span><span id="mfProgR"></span></div>
+        </div>
       </div>
 
       <!-- 사진 탭은 제거했습니다 (H-3).
@@ -338,9 +439,14 @@ input[type=number]{-moz-appearance:textfield;}
       </div>
 
 <div class="pane" id="mt-form">
-        <button type="button" class="btn btn-out btn-sm" style="margin-bottom:.6rem;" onclick="switchMTab('info')">← 기본정보</button>
         <div id="pendingBannerEl"></div>
         <div id="formEl"></div>
+        <!-- 하단 고정 제출 바 (2026-11-25) — 누르면 바로 보내지 않고 「제출 전 확인」 을 띄웁니다 (막지는 않음).
+             ⚠️ 버튼은 #mt-form 안에 btn-ok 로 둡니다 — setSubmitBusy·markEditMode 가 '#mt-form .btn-ok' 로 찾습니다. -->
+        <div class="mf-bar" id="mfBar">
+          <div class="mf-bar-sum" id="mfBarSum"></div>
+          <button type="button" class="btn btn-ok" id="mfSubmitBtn" onclick="openSubmitSheet()">📤 제출</button>
+        </div>
       </div>
     </div>
   </div>
@@ -355,6 +461,38 @@ input[type=number]{-moz-appearance:textfield;}
     <div class="notice-body" id="noticeBody"></div>
     <div class="notice-foot">
       <button class="btn btn-pri" onclick="confirmNotice()">✅ 확인했습니다</button>
+    </div>
+  </div>
+</div>
+
+<!-- 제출 전 확인 (2026-11-25) — 막지 않습니다. 빠진 것을 보여 주고 「그대로 제출」 을 누르면 보냅니다. -->
+<div class="mf-sheet-bg" id="mfSheetBg" onclick="if(event.target===this)closeSubmitSheet()">
+  <div class="mf-sheet">
+    <h3>제출 전 확인</h3>
+    <p class="lead">막지 않습니다. 고를 것이 있으면 [보기] 로 가서 고치세요.</p>
+    <ul class="mf-sum" id="mfSumList"></ul>
+    <div class="mf-sheet-act">
+      <button type="button" class="btn btn-out" onclick="closeSubmitSheet()">돌아가기</button>
+      <button type="button" class="btn btn-pri" id="mfSheetGo" onclick="submitFromSheet_()">그대로 제출</button>
+    </div>
+  </div>
+</div>
+
+<!-- ✏️ 채널 이름·수 고치기 (2026-11-25) — prompt() 를 막는 브라우저(앱 안 브라우저·일부 웹뷰)가 있어 화면 안 창으로 바꿈 -->
+<div class="mf-sheet-bg" id="chEditBg" style="z-index:410;" onclick="if(event.target===this)closeChEdit()">
+  <div class="mf-sheet">
+    <h3>✏️ 채널 고치기</h3>
+    <p class="lead" id="chEditLead"></p>
+    <div class="fg"><label>이름 — 인버터·접속함 번호 (예: INV5 · A-3)</label>
+      <input type="text" id="chEditName" autocomplete="off"></div>
+    <div class="fg"><label>채널(스트링) 수 — 1~60</label>
+      <input type="text" id="chEditCount" inputmode="numeric" autocomplete="off"></div>
+    <div class="fg"><label>고친 까닭</label>
+      <input type="text" id="chEditWhy" autocomplete="off" placeholder="예: 명판 확인 · 접속함 번호 다시 셈"></div>
+    <p class="lead" style="margin-top:.2rem;">두 대장에 같이 적히고, 누가·언제 고쳤는지 남습니다.</p>
+    <div class="mf-sheet-act">
+      <button type="button" class="btn btn-out" onclick="closeChEdit()">취소</button>
+      <button type="button" class="btn btn-pri" id="chEditGo" onclick="saveChEdit()">대장에 저장</button>
     </div>
   </div>
 </div>
@@ -1087,7 +1225,7 @@ async function openSite(no) {
   if (!site) return;
   S.currentSite = site;
   S.currentEquip = null;
-  S.photoMap = {};
+  S.photoMap = {}; S.thermalRows = null;
   S.extraTypesShown = [];
   S.editing = null;              // 수정 모드 해제
   S.draftOff = false;            // 자동 임시저장 다시 켜기 (제출 뒤 꺼둔 것)
@@ -1118,7 +1256,7 @@ async function openSite(no) {
   // ⚠️ 중첩 템플릿 리터럴(${cond ? `...` : ''})을 쓰지 않습니다.
   //    GAS 아이프레임 샌드박스에서 페이지가 통째로 렌더되지 않는 문제가 있었습니다.
   //    버튼 HTML은 미리 문자열로 조립해 두고 한 번만 끼워 넣습니다.
-  var btnStyle  = 'border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;';
+  var btnStyle  = 'border-radius:10px;padding:0 12px;min-height:40px;font-size:.88rem;font-weight:700;cursor:pointer;';   // 점검폼 v2: 12px → 40px 칩 (2026-11-25)
   var copyBtn   = '<button type="button" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;' + btnStyle
                 + '" onclick="copyAddressByNo(event, \'' + siteNoA + '\')">&#128203; 주소 복사</button>';
   var naviBtn   = '<button type="button" style="background:#2563eb;color:#fff;border:none;' + btnStyle
@@ -1126,7 +1264,7 @@ async function openSite(no) {
   var passBtn   = '';
   if (cleanPasscode !== '-') {
     passBtn = '<button type="button" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;'
-            + 'border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;margin-left:10px;'
+            + 'border-radius:10px;padding:0 10px;min-height:40px;font-size:.88rem;font-weight:700;cursor:pointer;margin-left:10px;'
             + '" onclick="copyPasscodeByNo(event, \'' + siteNoA + '\')">&#128273; 비번 복사</button>';
   }
 
@@ -1234,10 +1372,10 @@ function renderSeqPicker(site) {
 
   el.innerHTML = total
     + '<div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap;">'
-    + '<select id="seqSelect" style="flex:1;min-width:140px;height:32px;padding:4px 8px;font-size:12px;">' + opts + '</select>'
+    + '<select id="seqSelect" style="flex:1;min-width:140px;height:40px;padding:4px 8px;font-size:.95rem;">' + opts + '</select>'
     + '<button type="button" onclick="startEditInspection()" '
     + 'style="background:#fff7ed;color:#b45309;border:1px solid #fed7aa;border-radius:6px;'
-    + 'padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;height:32px;white-space:nowrap;">✏️ 수정</button>'
+    + 'padding:0 12px;font-size:.88rem;font-weight:700;cursor:pointer;height:40px;white-space:nowrap;">✏️ 수정</button>'
     + '</div>';
 }
 
@@ -1255,7 +1393,7 @@ async function startEditInspection() {
   if (!r || !r.success) { toast((r && r.error) || '불러오기에 실패했습니다.'); return; }
 
   S.editing = r;
-  S.photoMap = {};   // 수정 중 새로 추가하는 사진만 담습니다
+  S.photoMap = {}; S.thermalRows = null;   // 수정 중 새로 추가하는 사진만 담습니다
 
   // 점검구분은 '월차점검+기록+측정' 처럼 결합 문자열로 저장됩니다.
   // ⚠️ buildForm()은 점검구분을 하나만 받습니다. 결합 문자열을 그대로 넘기면
@@ -1410,13 +1548,41 @@ function applyFormValues(r) {
   Object.keys(r.items || {}).forEach(k => {
     if (/^tr_temp_\d+$/.test(k)) return;
     if (packedKeys[k]) return;              // 위에서 이미 풀어 넣었습니다 (C-1)
+    if (k === '불량내용') return;            // 아래에서 항목별 「불량 내용」 칸으로 나눠 넣습니다
     const el = document.getElementById('item_' + k);
     if (!el) { missed.push(k); return; }
     el.value = r.items[k];
-    if (el.type === 'hidden' && typeof setOX === 'function') setOX('item_' + k, r.items[k]);
+    if (el.type === 'hidden' && typeof setOX === 'function') setOX('item_' + k, r.items[k], true);
     filled++;
   });
+
+  /* 「불량내용」 → 항목별 메모칸 (2026-11-25 점검폼 v2)
+       collectFormData 가 「[항목명] 내용」 을 한 줄씩 모아 보냅니다. 이름으로 그 줄의 칸을 찾아 되돌립니다.
+       못 찾은 줄이 있으면(항목명이 바뀐 경우 등) missed 에 올려 수정 모드 배너가 알려 줍니다 — 저장해도 그 줄은 사라지지 않게
+       불량내용 칸을 다시 만들 때 못 찾은 줄도 붙여 보냅니다(S.defectKeep). */
+  S.defectKeep = [];
+  S.defectHad = !!String((r.items || {})['불량내용'] || '').trim();
+  String((r.items || {})['불량내용'] || '').split('\n').forEach(line => {
+    const t = line.trim();
+    if (!t) return;
+    const m = t.match(/^\[(.+?)\]\s*(.*)$/);
+    let done = false;
+    if (m) {
+      document.querySelectorAll('#formEl .ox-row').forEach(row => {
+        if (done) return;
+        const nm = row.querySelector('.ox-nm');
+        if (!nm || nm.textContent.trim() !== m[1].trim()) return;
+        const memo = row.querySelector('textarea[id$="_memo"]');
+        if (memo) { memo.value = m[2]; done = true; }
+      });
+    }
+    if (!done) S.defectKeep.push(t);
+  });
+  if (S.defectKeep.length) missed.push('불량내용(' + S.defectKeep.length + '줄)');
+
   if (missed.length) console.warn('복원하지 못한 항목:', missed);
+  if (typeof thermalRestore_ === 'function') thermalRestore_();   // 열화상 측정 개소 줄 되살리기 (2026-11-26)
+  if (typeof refreshChGrids_ === 'function') refreshChGrids_();   // 채널 칩·3상·진행률
   return missed;
 }
 
@@ -1490,8 +1656,9 @@ async function discardDraft() {
   if (dr && dr.no) await deleteDraft(dr.no);
   const el = document.getElementById('draftBanner');
   if (el) el.remove();
-  S.photoMap = {};
+  S.photoMap = {}; S.thermalRows = null;
   if (typeof renderAllPhotoGrids_ === 'function') renderAllPhotoGrids_();   // 폼이 이미 그려져 있으면 그리드도 비웁니다 (A-1)
+  if (typeof thermalRender_ === 'function') thermalRender_();
   toast('새로 작성합니다.');
 }
 
@@ -1519,7 +1686,8 @@ function renderDraftBanner(dr) {
 }
 
 function markEditMode(r, missed) {
-  const btn = document.querySelector('#mt-form .btn-ok');
+  // 하단 고정 바의 제출 버튼 (id 로 — 미결 배너의 btn-ok 가 먼저 걸리던 문제 · 2026-11-25)
+  const btn = document.getElementById('mfSubmitBtn') || document.querySelector('#mt-form .btn-ok');
   if (btn) btn.innerHTML = '💾 수정 저장';
 
   const form = document.getElementById('formEl');
@@ -1536,10 +1704,11 @@ function markEditMode(r, missed) {
          + '</div>';
   }
 
+  // 수정 모드는 보라 띠 — 주황은 미결사항만 씁니다 (2026-11-25 점검폼 v2)
   const banner =
-      '<div id="editModeBanner" style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:.7rem .9rem;margin-bottom:.7rem;">'
-    + '<div style="font-weight:700;color:#b45309;font-size:.9rem;">✏️ 수정 모드 · ' + escT_(r.inspId || '') + '</div>'
-    + '<div style="font-size:.82rem;color:#78350f;margin-top:.35rem;line-height:1.5;">'
+      '<div id="editModeBanner" class="edit-band">'
+    + '<div style="font-weight:700;font-size:.95rem;"><b>✏️ 수정 모드 · 덮어쓰기</b> · ' + escT_(r.inspId || '') + '</div>'
+    + '<div style="font-size:.88rem;color:#4c1d95;margin-top:.35rem;line-height:1.5;">'
     + '기존 기록을 덮어씁니다. 사진은 <b>추가만</b> 되며 이미 올린 사진은 그대로 유지됩니다.</div>'
     + warn
     + '<button type="button" class="btn btn-out btn-sm" style="margin-top:.5rem;" onclick="cancelEditMode()">수정 취소</button>'
@@ -1549,7 +1718,7 @@ function markEditMode(r, missed) {
 
 async function cancelEditMode() {
   S.editing = null;
-  S.photoMap = {};
+  S.photoMap = {}; S.thermalRows = null;
   const formEl = document.getElementById('formEl');
   if (formEl) formEl.innerHTML = '';
   currentInspType = '월차점검';
@@ -1723,19 +1892,25 @@ function closeModal() {
 function renderPendingBanner(faults) {
   const el = document.getElementById('pendingBannerEl');
   if (!faults.length) { el.innerHTML = ''; return; }
-  el.innerHTML = `
-    <div class="pending-banner">
-      <h3>⚠️ 전회차 미결사항 ${faults.length}건</h3>
-      ${faults.map(f => `
-        <div class="pending-item">
-          <div>[${escT_(f.발생일자)}] ${escT_(f.장애내용)}</div>
-          <div style="color:var(--muted);font-size:.8rem;">조치: ${escT_(f.조치구분)} · 상태: ${escT_(f.완료여부)}</div>
-          <div style="display:flex;gap:.4rem;margin-top:.3rem;">
-            <button class="btn btn-ok btn-sm" onclick="resolveFault('${escAttr(f.faultId)}','완료')">✅ 확인완료</button>
-            <button class="btn btn-out btn-sm" onclick="resolveFault('${escAttr(f.faultId)}','진행중')">🔄 처리중</button>
-          </div>
-        </div>`).join('')}
-    </div>`;
+  /* 접이식 (2026-11-25 점검폼 v2 단계 7) — 머리 「(n) 전회차 미결사항 ▾」 를 누르면 펼칩니다.
+       색은 주황 그대로 (주황 = 미결사항만). 버튼 높이 44px.
+       ⚠️ 중첩 템플릿 리터럴을 쓰지 않고 조각을 이어 붙입니다. */
+  const items = faults.map(f =>
+      '<div class="pending-item">'
+    +   '<div>[' + escT_(f.발생일자) + '] ' + escT_(f.장애내용) + '</div>'
+    +   '<div style="color:var(--muted);font-size:.86rem;margin:.15rem 0 .4rem;">조치: ' + escT_(f.조치구분) + ' · 상태: ' + escT_(f.완료여부) + '</div>'
+    +   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;">'
+    +     '<button class="btn btn-ok btn-sm" style="width:100%;margin:0;" onclick="resolveFault(\'' + escAttr(f.faultId) + '\',\'완료\')">✅ 확인완료</button>'
+    +     '<button class="btn btn-out btn-sm" style="width:100%;margin:0;" onclick="resolveFault(\'' + escAttr(f.faultId) + '\',\'진행중\')">🔄 처리중</button>'
+    +   '</div>'
+    + '</div>').join('');
+  el.innerHTML =
+      '<div class="pending-banner">'
+    +   '<button type="button" class="pb-hd" onclick="this.parentElement.classList.toggle(\'open\')">'
+    +     '<span class="pb-n">' + faults.length + '</span><span class="pb-ttl">전회차 미결사항</span><span style="color:#9a3412;">▾</span>'
+    +   '</button>'
+    +   '<div class="pb-bd">' + items + '</div>'
+    + '</div>';
 }
 
 async function resolveFault(faultId, status) {
@@ -1851,19 +2026,23 @@ async function rebuildFormKeepValues_() {
   const types = (S.inspTypes || []).slice();
   if (!types.length) types.push('월차점검');
 
+  // buildForm 이 비우는 것들 — 다시 그리기 전후로 이어 줍니다 (2026-11-25 점검폼 v2)
+  const keepDefect = { keep: S.defectKeep, had: S.defectHad, open: S.accOpen };
   formEl.innerHTML = '';
   currentInspType = types[0];
   S.inspTypes = [types[0]];
   await buildForm(types[0]);
   if (S.currentSite !== site) return;
+  S.defectKeep = keepDefect.keep || []; S.defectHad = !!keepDefect.had; S.accOpen = keepDefect.open || {};
   for (let i = 1; i < types.length; i++) await selectInspType(types[i]);
 
   Object.entries(saved).forEach(([id, v]) => {
     const el = document.getElementById(id);
     if (!el) return;
     el.value = v;
-    if (el.type === 'hidden' && typeof setOX === 'function') setOX(id, v);
+    if (el.type === 'hidden' && typeof setOX === 'function') setOX(id, v, true);   // force — 같은 값이어도 풀지 않음
   });
+  if (typeof refreshChGrids_ === 'function') refreshChGrids_();
   const fa = document.getElementById('f_action');
   if (fa && typeof toggleAction === 'function') toggleAction(fa.value || '없음');
   const fEm = document.getElementById('f_em_status');            // 긴급출동 처리결과 (2026-10-17)
@@ -1877,7 +2056,11 @@ async function buildForm(inspType) {
   // 설비정보 로딩이 끝나지 않았으면 대기 (측정 채널 표시에 필요)
   if (!S.currentEquip && S.equipReady) { try { await S.equipReady; } catch(_) {} }
   const equip  = S.currentEquip || {};
-  const today  = new Date().toISOString().split('T')[0];
+  /* 오늘 날짜는 【기기 시각】 으로 (2026-11-25)
+       ⚠️ toISOString() 은 UTC 라, 한국에서 오전 9시 전에 폼을 열면 점검일자가 【전날】 로 잡혔습니다.
+          점검ID·사진 폴더 년월도 점검일자를 따르므로, 1일 아침이면 지난달로 들어갈 수 있었습니다. */
+  const _n = new Date();
+  const today  = _n.getFullYear() + '-' + String(_n.getMonth() + 1).padStart(2, '0') + '-' + String(_n.getDate()).padStart(2, '0');
   const isLow  = (site.설비구분||'').includes('일반저압');
   const isSub  = equip.변압기수량 > 0;
 
@@ -1966,25 +2149,32 @@ async function buildForm(inspType) {
     + '</div>';
   }
 
+  /* 점검폼 v2 (2026-11-25 단계 6·7)
+       · 발전소명·주소 카드는 뺐습니다 — 고정 머리에 발전소 이름이 늘 보입니다.
+       · 일자·시각·회차는 한 줄 요약(<details>) — 누르면 펼쳐 고칩니다. 칸 id 는 그대로.
+       · 날씨·기온·송전전력·누적발전량·변압기온도(envHtml)는 매번 적는 칸이라 접지 않고 그대로 둡니다. */
+  S.defectKeep = []; S.defectHad = false; S.accOpen = {};
+  S.keepVals = null;      // 새 폼 — 이전 발전소의 보관값이 새지 않게 (renderInspSection 이 다시 만듦)
   let html = '';
-  html += `<div class="card" style="background:#f0f4ff;font-size:.88rem;padding:.75rem 1rem;margin-bottom:.75rem;">
-    <div style="font-weight:700;">${escT_(site.name)}</div>
-    <div style="color:var(--muted);margin-top:.2rem;font-size:.82rem;">📍 ${escT_(site.설비위치||'주소 미등록')}</div>
-  </div>`;
+  html += '<details class="mf-basic" id="mfBasic">'
+    + '<summary><span class="mf-basic-chips" id="mfBasicChips"></span><span class="mf-basic-link">편집</span></summary>'
+    + '<div class="mf-basic-ed">'
+    +   '<div class="row2">'
+    +     '<div class="fg"><label>점검일자 *</label><input type="date" id="f_date" value="' + today + '"></div>'
+    +     '<div class="fg"><label>점검시각 *</label><input type="time" id="f_time" value="' + new Date().toTimeString().slice(0,5) + '"></div>'
+    +   '</div>'
+    +   '<div class="fg" style="margin-bottom:.3rem;">'
+    +     '<label>점검회차 <span style="font-weight:400;color:var(--muted);font-size:.82rem;">제출 이력 기준 자동 계산 · 변경 가능</span></label>'
+    +     '<select id="f_seq"></select>'
+    +   '</div>'
+    + '</div>'
+    + '</details>';
   html += `
-  <div class="row2">
-    <div class="fg"><label>점검일자 *</label><input type="date" id="f_date" value="${today}"></div>
-    <div class="fg"><label>점검시각 *</label><input type="time" id="f_time" value="${new Date().toTimeString().slice(0,5)}"></div>
-  </div>
-  <div class="fg">
-    <label>점검회차 <span style="font-weight:400;color:var(--muted);font-size:.78rem;">제출 이력 기준 자동 계산 · 변경 가능</span></label>
-    <select id="f_seq"></select>
-  </div>
   ${envHtml}
   ${(시트기반 || 긴급) ? '' : '<div id="invKwhSection"></div><div id="trTempSection"></div>'}
 
-<div class="fg" style="margin-bottom:.3rem;">
-    <label>점검구분 * <span style="font-weight:400;color:var(--muted);font-size:.78rem;">항목을 탭하면 펼쳐집니다 · 복수 선택 가능</span></label>
+<div style="font-size:.88rem;font-weight:700;color:var(--muted);margin:1rem .2rem .3rem;">
+    점검구분 — 체크 = 제출에 포함 · 제목 = 펼치기
   </div>
 
 <div id="inspSectionWrap"></div>`;
@@ -2001,6 +2191,7 @@ async function buildForm(inspType) {
   // 회차는 대기함(IDB)도 세므로 비동기입니다 — 폼이 다 그려진 뒤 채웁니다 (A-10)
   await calcSeq();
   autoFillPrevPower();
+  if (typeof updateFormProgress === 'function') updateFormProgress();   // 회차가 채워진 뒤 한 줄 요약·진행률
 
   /* 받아둔 것으로 그렸다면 서버 값이 다르게 왔을 때만 다시 그립니다 (A-11)
      그 사이 다른 발전소를 열었거나 폼을 새로 그렸으면(buildId 불일치) 건드리지 않습니다. */
@@ -2076,18 +2267,22 @@ function renderTrTempSection(equip, isSub) {
   }
   el.innerHTML = html;
 }
+/* 3상 한 호기 — 입력칸 아래에 A·B·C 로 나눠 보여 줍니다 (2026-11-25 점검폼 v2 단계 5)
+     ⚠️ .ph-set 개수로 호기 수를 셉니다(복원·추가·제거) — 나눠 보기는 .ph-set 【안】 에 둡니다. */
 function renderPhaseSet(itemId, n, unit) {
-  return `<div class="ph-set" style="display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem;">
-    <span style="font-size:.8rem;font-weight:700;color:var(--muted);min-width:2.6rem;">${n}호기</span>
-    <input type="text" id="item_${itemId}_${n}" inputmode="decimal"
-           placeholder="예: 22900/22900/22900"
-           style="flex:1;"
-           oninput="autoSlash3(this)">
-  </div>`;
+  return '<div class="ph-set">'
+    + '<div class="ph-line">'
+    +   '<span style="font-size:.86rem;font-weight:700;color:var(--sub);min-width:2.6rem;">' + n + '호기</span>'
+    +   '<input type="text" id="item_' + itemId + '_' + n + '" inputmode="decimal" placeholder="예: 22900/22900/22900"'
+    +     ' style="flex:1;font-family:ui-monospace,monospace;" oninput="autoSlash3(this)">'
+    + '</div>'
+    + '<div class="ph-split" id="phs_item_' + itemId + '_' + n + '"></div>'
+    + '</div>';
 }
 function autoSlash3(el) {
   // "..", 스페이스 → / 변환, 중복 / 정리 (3상 입력용, 아이폰 키패드 대응)
   el.value = el.value.replace(/\.\./g,'/').replace(/ /g,'/').replace(/\/+/g,'/').replace(/\/\./g,'/');
+  if (typeof renderPhSplit_ === 'function') renderPhSplit_(el);
 }
 function renderNumSet(itemId, n, unit) {
   return `<div class="num-set" style="display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem;">
@@ -2099,8 +2294,7 @@ function addNumSet(itemId, name, unit) {
   const wrap = document.getElementById(`num_wrap_${itemId}`);
   if (!wrap) return;
   const n = wrap.querySelectorAll('.num-set').length + 1;
-  wrap.insertAdjacentHTML('beforeend', renderNumSet(itemId, n, unit));
-  toast(`${name} ${n}호기 추가`);
+  wrap.insertAdjacentHTML('beforeend', renderNumSet(itemId, n, unit));   // 알림 없음 — 칸이 늘어난 게 보입니다 (2026-11-25)
 }
 function removeNumSet(itemId, name) {
   const wrap = document.getElementById(`num_wrap_${itemId}`);
@@ -2108,14 +2302,14 @@ function removeNumSet(itemId, name) {
   const sets = wrap.querySelectorAll('.num-set');
   if (sets.length <= 1) return toast('1호기는 제거할 수 없습니다');
   sets[sets.length - 1].remove();
-  toast(`${name} ${sets.length}호기 제거`);
+  if (typeof updateFormProgress === 'function') updateFormProgress();
 }
 function addPhaseSet(itemId, name, unit) {
   const wrap = document.getElementById(`ph_wrap_${itemId}`);
   if (!wrap) return;
   const n = wrap.querySelectorAll('.ph-set').length + 1;
   wrap.insertAdjacentHTML('beforeend', renderPhaseSet(itemId, n, unit));
-  toast(`${name} ${n}호기 추가`);
+  if (typeof updateFormProgress === 'function') updateFormProgress();
 }
 function removePhaseSet(itemId, name) {
   const wrap = document.getElementById(`ph_wrap_${itemId}`);
@@ -2123,7 +2317,7 @@ function removePhaseSet(itemId, name) {
   const sets = wrap.querySelectorAll('.ph-set');
   if (sets.length <= 1) return toast('1호기는 제거할 수 없습니다');
   sets[sets.length - 1].remove();
-  toast(`${name} ${sets.length}호기 제거`);
+  if (typeof updateFormProgress === 'function') updateFormProgress();
 }
 
 // ===== 0-6 A단계: 주소/비번 복사 · 네비안내 함수만 추가 (HTML 버튼은 아직 없음) =====
@@ -2705,10 +2899,19 @@ function renderInspSection(inspTypeOrTypes, site, equip, isLow, isSub, sections)
   if (!wrap) return;
 
   // ── 입력값 보존: 재렌더링 전 현재 입력 스냅샷 ──
-  const saved = {};
+  //  S.keepVals 에 쌓아 둡니다 (2026-11-25 점검폼 v2) — 체크를 풀었다 다시 걸어도 적던 값이 돌아옵니다.
+  //  (체크를 푼 구분은 칸 자체를 안 그리므로, 스냅샷만으로는 다시 걸 때 값이 사라졌습니다)
+  //  지운 칸은 keepVals 에서도 지웁니다 — 안 그러면 지운 값이 되살아납니다.
+  //  buildForm 이 새 폼마다 S.keepVals 를 비웁니다 (다른 발전소 값이 새지 않게).
+  if (!S.keepVals || S.keepVals.no !== (S.currentSite && S.currentSite.no)) {
+    S.keepVals = { no: S.currentSite && S.currentSite.no, v: {} };
+  }
   wrap.querySelectorAll('input, textarea, select').forEach(el => {
-    if (el.id && el.value !== '' && el.type !== 'file') saved[el.id] = el.value;
+    if (!el.id || el.type === 'file') return;
+    if (el.value !== '') S.keepVals.v[el.id] = el.value;
+    else delete S.keepVals.v[el.id];
   });
+  const saved = Object.assign({}, S.keepVals.v);
 
   // ── 아코디언 구성 ──
   //  긴급출동은 기본정보 화면의 「🚨 긴급출동」 버튼으로만 진입합니다.
@@ -2721,20 +2924,30 @@ function renderInspSection(inspTypeOrTypes, site, equip, isLow, isSub, sections)
   const icons = {'월차점검':'🔍','측정':'📐','기록':'📊','연차측정':'📏','분기점검':'📅','반기점검':'🗓','긴급출동':'🚨','열화상촬영':'🌡'};
   if (!S.extraTypesShown) S.extraTypesShown = [];
 
+  /* 아코디언 머리 = 두 버튼 (2026-11-25 점검폼 v2 단계 4)
+       ☑ 체크  → selectInspType : 제출에 포함/제외 (S.inspTypes)
+       제목    → toggleAccOpen  : 펼치기/접기만 (S.accOpen) — 다시 그리지 않고, 포함 여부도 안 바꿈
+     ⚠️ 예전에는 제목 한 번 탭이 펼치기와 선택을 같이 해서, 측정을 적고 【접기만 해도】
+        측정이 제출에서 빠졌습니다 (오류 없이 값이 사라짐). */
+  if (!S.accOpen) S.accOpen = {};
   const renderAcc = function(t) {
-    const opened = (S.inspTypes||[]).indexOf(t) >= 0;
-    return `<div class="acc-sec" id="acc_${t}">
-      <div class="acc-hdr${opened?' open':''}" id="accHdr_${t}" onclick="toggleInspAcc('${t}')"
-        style="display:flex;justify-content:space-between;align-items:center;padding:.75rem .9rem;
-               background:${opened?'#eff6ff':'#f8fafc'};border:1.5px solid ${opened?'var(--pri)':'var(--border)'};
-               border-radius:10px;margin:.5rem 0 .3rem;cursor:pointer;font-weight:700;font-size:.92rem;">
-        <span>${icons[t]} ${t}</span>
-        <span id="accArrow_${t}" style="color:var(--muted);">${opened?'▲':'▼'}</span>
-      </div>
-      <div class="acc-body" id="accBody_${t}" style="display:${opened?'block':'none'};padding:.3rem .1rem;">
-        ${buildSectionHtml(t, site, equip, isLow, isSub, sections)}
-      </div>
-    </div>`;
+    const on = (S.inspTypes||[]).indexOf(t) >= 0;
+    const open = (S.accOpen[t] === undefined) ? on : !!S.accOpen[t];
+    const body = on
+      ? buildSectionHtml(t, site, equip, isLow, isSub, sections)
+      : '<div class="acc-off">제출에서 빠집니다 — 왼쪽 ☐ 를 누르면 항목이 나타나고 제출에 포함됩니다.'
+        + ' 적어 둔 값은 다시 체크하면 돌아옵니다.</div>';
+    return '<div class="acc-sec' + (on ? ' on' : '') + (open ? ' open' : '') + '" id="acc_' + t + '">'
+      + '<div class="acc-hdr" id="accHdr_' + t + '">'
+      +   '<button type="button" class="acc-check" aria-label="' + t + ' 제출에 포함" onclick="selectInspType(\'' + t + '\')"><span class="acc-box">' + (on ? '✓' : '') + '</span></button>'
+      +   '<button type="button" class="acc-tg" onclick="toggleAccOpen(\'' + t + '\')">'
+      +     '<span class="acc-nm">' + icons[t] + ' ' + t + '</span>'
+      +     '<span class="acc-cnt" id="accCnt_' + t + '"></span>'
+      +     '<span class="acc-chev" id="accArrow_' + t + '">' + (open ? '▲' : '▼') + '</span>'
+      +   '</button>'
+      + '</div>'
+      + '<div class="acc-body" id="accBody_' + t + '" style="display:' + (open ? 'block' : 'none') + ';">' + body + '</div>'
+      + '</div>';
   };
 
   let out = '';
@@ -2797,14 +3010,8 @@ function renderInspSection(inspTypeOrTypes, site, equip, isLow, isSub, sections)
     const el = document.getElementById(id);
     if (!el) return;
     el.value = val;
-    if (el.type === 'hidden') {
-      const row = el.closest('.ox-row');
-      if (row) {
-        const map = {'O':'o','X':'x','△':'t','/':'na'};
-        const btn = row.querySelector(`.ox-btn.${map[val]}`);
-        if (btn) btn.classList.add('sel');
-      }
-    }
+    // 판정은 setOX 로 — 버튼 색과 X 의 「불량 내용」 칸까지 같이 되살립니다 (force: 같은 값이어도 풀지 않음)
+    if (el.type === 'hidden' && el.closest('.ox-row')) setOX(id, val, true);
   });
 
   // ── 조치구분에 따른 「요청 내용」 칸 표시 복원 (2026-09-06 · A-20) ──
@@ -2825,20 +3032,24 @@ function renderInspSection(inspTypeOrTypes, site, equip, isLow, isSub, sections)
       if ((S.photoMap[itemId] || []).length > 0) updatePhotoCount(itemId, needBy[itemId] || 0);
     });
   }
+  // 채널 칩·3상 나눠 보기·진행률 다시 칠하기 (2026-11-25)
+  if (typeof refreshChGrids_ === 'function') refreshChGrids_();
 }
-function toggleInspAcc(t) {
-  const bodyEl  = document.getElementById(`accBody_${t}`);
-  const hdrEl   = document.getElementById(`accHdr_${t}`);
-  const arrowEl = document.getElementById(`accArrow_${t}`);
-  if (bodyEl) {
-    const isOpening = bodyEl.style.display === 'none';
-    bodyEl.style.display = isOpening ? 'block' : 'none';
-    if (hdrEl)   hdrEl.classList.toggle('open', isOpening);
-    if (arrowEl) arrowEl.textContent = isOpening ? '▲' : '▼';
-  }
-  if (typeof selectInspType === 'function') {
-    selectInspType(t);
-  }
+/* 펼치기/접기만 — 다시 그리지 않고 제출 포함 여부도 건드리지 않습니다 (2026-11-25 점검폼 v2 단계 4) */
+function toggleAccOpen(t) {
+  const bodyEl = document.getElementById('accBody_' + t);
+  if (!bodyEl) return;
+  setAccOpen_(t, bodyEl.style.display === 'none');
+}
+function setAccOpen_(t, open) {
+  if (!S.accOpen) S.accOpen = {};
+  S.accOpen[t] = !!open;
+  const bodyEl  = document.getElementById('accBody_' + t);
+  const secEl   = document.getElementById('acc_' + t);
+  const arrowEl = document.getElementById('accArrow_' + t);
+  if (bodyEl)  bodyEl.style.display = open ? 'block' : 'none';
+  if (secEl)   secEl.classList.toggle('open', !!open);
+  if (arrowEl) arrowEl.textContent = open ? '▲' : '▼';
 }
 async function showExtraType(t) {
   // [+ 추가점검] — 분기/반기 아코디언 표시 + 바로 펼침(선택)
@@ -2850,7 +3061,6 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
   let html = '';
   if (inspType === '열화상촬영') {
     html += `
-    <div class="sec-title">🌡 열화상촬영</div>
     <div class="fg">
       <label>촬영일시 <span style="font-weight:400;color:var(--muted);font-size:.78rem;">첫 사진 업로드 시 자동 입력</span></label>
       <input type="datetime-local" id="item_thermal_dt" placeholder="사진 선택 시 자동 입력">
@@ -2860,12 +3070,17 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
         style="width:100%;padding:.75rem;border:1.5px dashed var(--border);border-radius:10px;
                background:#f8fafc;font-size:.9rem;cursor:pointer;">📷 사진 추가</button>
     </div>
-    <div class="photo-grid" id="thermalGrid">${renderPhotoGridHtml_('thermal')}</div>`;
+    <div class="photo-grid" id="thermalGrid">${renderPhotoGridHtml_('thermal')}</div>
+    <div class="fg"><label>측정 개소 <span style="font-weight:400;color:var(--muted);font-size:.78rem;">사진에 찍힌 숫자를 옮겨 적기 · 색으로 짐작하지 않기</span></label>
+      <div id="thermalRows">${thermalRowsHtml_()}</div>
+      <button type="button" class="btn btn-out" onclick="thermalAddRow()" style="width:100%;margin:.2rem 0 0;">+ 개소 추가</button>
+      <p style="font-size:.76rem;color:var(--muted);margin:.35rem 0 0;">기준온도 = 같은 종류의 <b>정상 부위</b> 온도 (화면 최저값 아님 — 바탕이 잡힙니다)</p>
+      ${THERMAL_FIELDS.map(k => `<input type="text" hidden id="item_thermal_${k}" value="${escAttr(thermalPack_()[k])}">`).join('')}
+    </div>`;
     return html;
   }
   if (inspType === '긴급출동') {
-    html += `<div class="sec-title">🚨 긴급출동</div>
-    <div class="fg"><label>장애 현상 *
+    html += `<div class="fg"><label>장애 현상 *
       <!-- 2026-11-05 : takeItemPhoto → takeItemPhotoMulti
            여기 둘만 【한 장씩】 골라지던 까닭입니다 (takeItemPhoto 는 multiple=false).
            점검항목·추가사진·열화상은 모두 여러 장이라, 긴급출동만 다르게 동작했습니다. -->
@@ -2878,8 +3093,7 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
     return html;
   }
   if (inspType === '측정' || inspType === '기록' || inspType === '연차측정' || inspType === '분기점검' || inspType === '반기점검') {
-    const secIcons = {'측정':'📐','기록':'📊','연차측정':'📏','분기점검':'📅','반기점검':'🗓'};
-    html += `<div class="sec-title">${secIcons[inspType]||'📐'} ${inspType}</div>`;
+    // 아코디언 머리에 이미 구분 이름이 있어 안쪽 제목은 그리지 않습니다 (2026-11-25)
     if (inspType === '측정' && !equip.channels) {
       html += `<div style="padding:.6rem;background:#fef3c7;border-radius:8px;font-size:.85rem;color:#92400e;margin-bottom:.5rem;">
         ⚠️ 설비정보 로딩 중이거나 설비관리대장에 채널 정보(명판(채널수))가 없습니다.</div>`;
@@ -2905,26 +3119,28 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
           // 시트에서 온 문자열(명판·항목명·단위)은 escT_/escAttr 로 감쌉니다 (2026-09-06 · A-14)
           const lbl = escT_(ch.label || `No${ch.slot || i + 1}`);
           const cnt = Number(ch.count) || 0;
-          h += `<div style="border:1.5px solid var(--border);border-radius:10px;padding:.6rem .7rem;margin-bottom:.5rem;background:#fafcff;">
-            <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;display:flex;align-items:center;gap:.4rem;">
+          // 🎲 채널 수치 자동입력 — 직원관리 「자동입력허용」=Y 인 사람에게만 (그대로 유지 · 2026-11-25 사장님)
+          const diceBtn = isDevUser()
+            ? '<button class="cam-btn" type="button" onclick="randomFill(\'ch_' + i + '\',' + cnt + ')" style="margin-left:.3rem;min-width:44px;">🎲</button>'
+            : '';
+          h += `<div class="ch-group" data-label="${escAttr(ch.label || ('No' + (ch.slot || i + 1)))}" style="border:1.5px solid var(--border);border-radius:12px;padding:.7rem;margin-bottom:.6rem;background:#fbfcfe;">
+            <div style="font-weight:700;font-size:1rem;margin-bottom:.4rem;display:flex;align-items:center;gap:.4rem;">
               <span>${lbl} <span class="ch-hint">${cnt}채널</span></span>
               <!-- 현장에서 이름·채널수를 바로 고치는 버튼 (2026-11-15)
                    채널전류를 입력한다고 대장이 저절로 바뀌지는 않습니다(10-30 결정 그대로).
                    점검자가 명판·접속함을 보고 【직접 눌러서】 고칠 때만 대장(두 시트)이 바뀌고 자취가 남습니다. -->
-              <button type="button" onclick="editChannel(${i})"
-                style="margin-left:auto;border:1.5px solid var(--border);border-radius:8px;padding:.15rem .55rem;background:#fff;font-size:.78rem;cursor:pointer;color:var(--pri);">✏️ 수정</button>
+              <button type="button" class="btn-chip" onclick="editChannel(${i})" style="margin-left:auto;">✏️ 수정</button>
             </div>`;
           chItems.forEach(item => {
             const u = item.단위 ? ` (${escT_(item.단위)})` : '';
             if (item.항목ID === 'ch_current' || /채널.*전류/.test(item.항목명)) {
               h += `<div class="fg" style="margin-bottom:.4rem;">
-                <label>${escT_(item.항목명)}${u}
-                  ${isDevUser()?`<button class="cam-btn" type="button" onclick="randomFill('ch_${i}',${cnt})" style="margin-left:.2rem;">🎲</button>`:''}
-                </label>
-                <input class="ch-input" type="text" id="ch_${i}" inputmode="decimal"
+                <label>${escT_(item.항목명)}${u}${diceBtn}</label>
+                <input class="ch-input" type="text" id="ch_${i}" inputmode="decimal" data-max="${cnt}"
                        placeholder="${Array.from({length:Math.min(cnt,5)},(_,j)=>j===0?'2.3':'0.0').join('/')+'...'}"
                        oninput="autoSlash(this,${cnt})" onblur="validateCh(this,${cnt},'${escAttr(ch.label||'')}',${Number(ch.slot)||i+1})">
                 <div class="ch-status" id="chs_${i}"></div>
+                <div class="ch-grid" id="chg_${i}"></div>
               </div>`;
             } else {
               h += `<div class="fg" style="margin-bottom:.4rem;">
@@ -2950,20 +3166,20 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
           html += renderChGroup();
         } else if (t === '3상') {
           // 3상 측정 — A/B/C상을 "/" 구분 한 줄 입력, [+ 추가]로 호기 확장
-          html += `<div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
-            <span style="font-size:.83rem;font-weight:700;color:var(--muted);">${nameT}${unit} <span style="font-weight:400;font-size:.75rem;">${escT_(item.비고 || 'A/B/C상 · / 구분')}</span></span>
-            <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);"
-              onclick="addPhaseSet('${idA}','${nameA}','${unitA}')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('${idA}','${nameA}')">− 제거</button>
+          html += `<div class="sub-hd">
+            <span>${nameT}${unit} <small>${escT_(item.비고 || 'A/B/C상 · / 구분')}</small></span>
+            <button type="button" class="btn-chip"
+              onclick="addPhaseSet('${idA}','${nameA}','${unitA}')">+ 추가</button><button type="button" class="btn-chip ng" onclick="removePhaseSet('${idA}','${nameA}')">− 제거</button>
           </div>
           <div id="ph_wrap_${idA}">
             ${renderPhaseSet(item.항목ID, 1, item.단위)}
           </div>`;
         } else if (t === '숫자반복') {
           // 호기별 단일값 입력 + [+ 추가] (VCB/ACB 발전량 등)
-          html += `<div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
-            <span style="font-size:.83rem;font-weight:700;color:var(--muted);">${nameT}${unit}</span>
-            <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);"
-              onclick="addNumSet('${idA}','${nameA}','${unitA}')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removeNumSet('${idA}','${nameA}')">− 제거</button>
+          html += `<div class="sub-hd">
+            <span>${nameT}${unit}</span>
+            <button type="button" class="btn-chip"
+              onclick="addNumSet('${idA}','${nameA}','${unitA}')">+ 추가</button><button type="button" class="btn-chip ng" onclick="removeNumSet('${idA}','${nameA}')">− 제거</button>
           </div>
           <div id="num_wrap_${idA}">
             ${renderNumSet(item.항목ID, 1, item.단위)}
@@ -2987,11 +3203,10 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
       equip.channels.forEach((ch, i) => {
         const slot = ch.slot || i + 1;
         const lbl = ch.label || (isStr ? `INV${slot}` : `No${slot}`);
-        html += `<div style="border:1.5px solid var(--border);border-radius:10px;padding:.6rem .7rem;margin-bottom:.5rem;background:#fafcff;">
-          <div style="font-weight:700;font-size:.9rem;margin-bottom:.4rem;display:flex;align-items:center;gap:.4rem;">
+        html += `<div class="ch-group" data-label="${escAttr(lbl)}" style="border:1.5px solid var(--border);border-radius:12px;padding:.7rem;margin-bottom:.6rem;background:#fbfcfe;">
+          <div style="font-weight:700;font-size:1rem;margin-bottom:.4rem;display:flex;align-items:center;gap:.4rem;">
             <span>${escT_(lbl)} <span class="ch-hint">${Number(ch.count) || 0}채널</span></span>
-            <button type="button" onclick="editChannel(${i})"
-              style="margin-left:auto;border:1.5px solid var(--border);border-radius:8px;padding:.15rem .55rem;background:#fff;font-size:.78rem;cursor:pointer;color:var(--pri);">✏️ 수정</button>
+            <button type="button" class="btn-chip" onclick="editChannel(${i})" style="margin-left:auto;">✏️ 수정</button>
           </div>`;
         if (isStr) {
           html += `<div class="row2" style="margin-bottom:.4rem;">
@@ -3001,14 +3216,16 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
               <input type="text" id="inv_kw_${i+1}" inputmode="decimal" placeholder="kW" oninput="handleSmartInput(this)"></div>
           </div>`;
         }
+        const diceF = isDevUser()   // 🎲 자동입력 유지 (2026-11-25)
+          ? '<button class="cam-btn" type="button" onclick="randomFill(\'ch_' + i + '\',' + (Number(ch.count) || 0) + ')" style="margin-left:.3rem;min-width:44px;">🎲</button>'
+          : '';
         html += `<div class="fg" style="margin-bottom:.4rem;">
-            <label>채널별 전류(A)
-              ${isDevUser()?`<button class="cam-btn" type="button" onclick="randomFill('ch_${i}',${ch.count})" style="margin-left:.2rem;">🎲</button>`:''}
-            </label>
-            <input class="ch-input" type="text" id="ch_${i}" inputmode="decimal"
+            <label>채널별 전류(A)${diceF}</label>
+            <input class="ch-input" type="text" id="ch_${i}" inputmode="decimal" data-max="${Number(ch.count) || 0}"
                    placeholder="${Array.from({length:Math.min(ch.count,5)},(_,j)=>j===0?'2.3':'0.0').join('/')+'...'}"
-                   oninput="autoSlash(this,${ch.count})" onblur="validateCh(this,${ch.count},'${ch.label||''}',${ch.slot||i+1})">
+                   oninput="autoSlash(this,${ch.count})" onblur="validateCh(this,${ch.count},'${escAttr(ch.label||'')}',${ch.slot||i+1})">
             <div class="ch-status" id="chs_${i}"></div>
+            <div class="ch-grid" id="chg_${i}"></div>
           </div>
           <div class="row2">
             <div class="fg" style="margin-bottom:0;"><label>개방전압(V)</label>
@@ -3047,36 +3264,37 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
     </div>`;
     if (!isLow) {
       html += `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin:.75rem 0 .3rem;">
-        <span style="font-size:.83rem;font-weight:700;color:var(--muted);">VCB 전압 (V) <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
-        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('R_VCB_V','VCB 전압','V')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('R_VCB_V','VCB 전압')">− 제거</button>
+      <div class="sub-hd">
+        <span>VCB 전압 (V) <small>A/B/C상 · / 구분</small></span>
+        <button type="button" class="btn-chip" onclick="addPhaseSet('R_VCB_V','VCB 전압','V')">+ 추가</button><button type="button" class="btn-chip ng" onclick="removePhaseSet('R_VCB_V','VCB 전압')">− 제거</button>
       </div>
       <div id="ph_wrap_R_VCB_V">${renderPhaseSet('R_VCB_V', 1, 'V')}</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
-        <span style="font-size:.83rem;font-weight:700;color:var(--muted);">VCB 전류 (A) <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
-        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('R_VCB_A','VCB 전류','A')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('R_VCB_A','VCB 전류')">− 제거</button>
+      <div class="sub-hd">
+        <span>VCB 전류 (A) <small>A/B/C상 · / 구분</small></span>
+        <button type="button" class="btn-chip" onclick="addPhaseSet('R_VCB_A','VCB 전류','A')">+ 추가</button><button type="button" class="btn-chip ng" onclick="removePhaseSet('R_VCB_A','VCB 전류')">− 제거</button>
       </div>
       <div id="ph_wrap_R_VCB_A">${renderPhaseSet('R_VCB_A', 1, 'A')}</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
-        <span style="font-size:.83rem;font-weight:700;color:var(--muted);">ACB 전압 (V) <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
-        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('R_ACB_V','ACB 전압','V')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('R_ACB_V','ACB 전압')">− 제거</button>
+      <div class="sub-hd">
+        <span>ACB 전압 (V) <small>A/B/C상 · / 구분</small></span>
+        <button type="button" class="btn-chip" onclick="addPhaseSet('R_ACB_V','ACB 전압','V')">+ 추가</button><button type="button" class="btn-chip ng" onclick="removePhaseSet('R_ACB_V','ACB 전압')">− 제거</button>
       </div>
       <div id="ph_wrap_R_ACB_V">${renderPhaseSet('R_ACB_V', 1, 'V')}</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin:.5rem 0 .3rem;">
-        <span style="font-size:.83rem;font-weight:700;color:var(--muted);">ACB 전류 (A) <span style="font-weight:400;font-size:.75rem;">A/B/C상 · / 구분</span></span>
-        <button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#f8fafc;font-size:.78rem;cursor:pointer;color:var(--pri);" onclick="addPhaseSet('R_ACB_A','ACB 전류','A')">+ 추가</button><button type="button" style="border:1.5px solid var(--border);border-radius:8px;padding:.25rem .6rem;background:#fff5f5;font-size:.78rem;cursor:pointer;color:var(--ng);margin-left:.25rem;" onclick="removePhaseSet('R_ACB_A','ACB 전류')">− 제거</button>
+      <div class="sub-hd">
+        <span>ACB 전류 (A) <small>A/B/C상 · / 구분</small></span>
+        <button type="button" class="btn-chip" onclick="addPhaseSet('R_ACB_A','ACB 전류','A')">+ 추가</button><button type="button" class="btn-chip ng" onclick="removePhaseSet('R_ACB_A','ACB 전류')">− 제거</button>
       </div>
       <div id="ph_wrap_R_ACB_A">${renderPhaseSet('R_ACB_A', 1, 'A')}</div>`;
     }
     return html;
   }
   // ── 월차점검 ──
-  html += `<div class="sec-title">🔍 월차점검 <span style="font-weight:400;color:var(--muted);font-size:.78rem;">항목별 필요 사진 매수는 배지로 표시됩니다</span></div>`;
-  html += `
-  <div class="all-ok-bar" id="allOkBar">
-    <span>✅ 전체 양호</span>
-    <button type="button" class="all-ok-btn" id="allOkBtn" onclick="setAllOK()">전체 O 선택</button>
-  </div>`;
+  /* 도구줄 = [전체 O] + 뜻풀이 (2026-11-25 점검폼 v2)
+       「전체 O」 는 안 고른 칸만 O 로 채웁니다 — 이미 고른 X·△·/ 는 그대로 둡니다. */
+  html += '<div class="ox-tool">'
+    + '<button type="button" class="all-ok-btn" id="allOkBtn" onclick="setAllOK(this)">전체 O</button>'
+    + '<div class="ox-legend"><span><b style="color:var(--ok)">O</b> 양호</span><span><b style="color:var(--ng)">X</b> 불량</span>'
+    + '<span><b style="color:var(--warn)">△</b> 주의</span><span><b style="color:#64748b">/</b> 해당없음</span></div>'
+    + '</div>';
   // 월차점검 항목만 필터 (복수 점검 시 측정 항목 혼입 방지)
   const monthlySections = {};
   Object.entries(sections).forEach(([sec, secItems]) => {
@@ -3085,6 +3303,8 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
   });
   if (Object.keys(monthlySections).length > 0) {
     Object.entries(monthlySections).forEach(([sec, secItems]) => {
+      // 섹션 제목 (점검항목원장 「섹션」) — 예전에는 화면에 안 나왔습니다 (2026-11-25)
+      if (sec && sec !== 'undefined') html += '<div class="grp-t">' + escT_(sec) + '</div>';
       html += `<div class="ox-table">`;
       secItems.forEach(item => {
         if (item.입력유형 === 'OX' || item.입력유형 === 'OX2' || item.입력유형 === 'OX2_NA') {
@@ -3111,33 +3331,20 @@ function buildSectionHtml(inspType, site, equip, isLow, isSub, sections) {
 
 
 
-function setAllOK() {
-  const btn = document.getElementById('allOkBtn');
-  const isActive = btn?.classList.contains('active');
-
-  if (!isActive) {
-    document.querySelectorAll('.ox-row').forEach(row => {
-      row.querySelectorAll('.ox-btn').forEach(b => b.classList.remove('sel'));
-      const inp = row.querySelector('input[type="hidden"]');
-      const hasNA = row.querySelector('.ox-btn.na');
-      if (hasNA) {
-        const oBtn = row.querySelector('.ox-btn.o');
-        if (oBtn) oBtn.classList.add('sel');
-        if (inp) inp.value = 'O';
-      } else {
-        const oBtn = row.querySelector('.ox-btn.o');
-        if (oBtn) oBtn.classList.add('sel');
-        if (inp) inp.value = 'O';
-      }
-    });
-    if (btn) { btn.classList.add('active'); btn.textContent = '✅ 전체 O 설정됨'; }
-    toast('✅ 모든 점검항목을 양호(O)로 설정했습니다');
-  } else {
-    document.querySelectorAll('.ox-row input[type="hidden"]').forEach(inp => inp.value = '');
-    document.querySelectorAll('.ox-btn').forEach(b => b.classList.remove('sel'));
-    if (btn) { btn.classList.remove('active'); btn.textContent = '전체 O 선택'; }
-    toast('초기화됐습니다');
-  }
+/* 전체 O — 【안 고른 칸만】 O 로 채웁니다 (2026-11-25 점검폼 v2 단계 1)
+     ⚠️ 예전에는 누르면 이미 고른 X 까지 O 로 덮었고, 다시 누르면 전부 지웠습니다(「초기화」).
+        X 를 고른 뒤 실수로 한 번 더 누르면 불량 기록이 사라졌습니다.
+     범위는 이 버튼이 있는 아코디언 안만 (다른 구분의 판정은 건드리지 않음). */
+function setAllOK(btn) {
+  const scope = (btn && btn.closest && btn.closest('.acc-body')) || document.getElementById('formEl') || document;
+  let n = 0;
+  scope.querySelectorAll('.ox-row input[type="hidden"][id^="item_"]').forEach(inp => {
+    if (inp.value !== '') return;
+    setOX(inp.id, 'O', true);
+    n++;
+  });
+  if (typeof scheduleDraftSave === 'function') scheduleDraftSave();
+  toast(n ? '미선택 ' + n + '개 항목을 O로 채웠습니다\n이미 고른 X·△·/ 는 그대로입니다' : '이미 모두 골라져 있습니다');
 }
 /**
  * 추가사진 — 버튼 하나로 촬영/보관함 선택 (H-11)
@@ -3257,9 +3464,9 @@ function renderActionSection(wrap) {
            background:#f8fafc;font-size:.9rem;cursor:pointer;text-align:center;margin-bottom:.5rem;">
     📷 사진 추가
   </button>
-  <div class="photo-grid" id="sitePhotoGrid">${renderPhotoGridHtml_('site_extra')}</div>
-  <button class="btn btn-ok" onclick="submitForm()">📤 제출</button>`;
+  <div class="photo-grid" id="sitePhotoGrid">${renderPhotoGridHtml_('site_extra')}</div>`;
     wrap.appendChild(div);
+    syncSubmitBar_();
     return;
   }
   div.innerHTML = `
@@ -3292,10 +3499,138 @@ function renderActionSection(wrap) {
     <div class="fg" id="vendorWrap" style="display:none;"><label>요청 업체명</label><input type="text" id="f_vendor" placeholder="업체명"></div>
   </div>
   <div class="fg"><label>특이사항</label><textarea id="f_note" placeholder="점검 중 발견 내용, 고객 요청사항 등"></textarea></div>
-  <button class="btn btn-ok" onclick="submitForm()">📤 제출</button>
 `;
   wrap.appendChild(div);
+  syncSubmitBar_();
 }
+/* 제출 버튼은 화면 아래 고정 바(#mfSubmitBtn)에 있습니다 (2026-11-25 점검폼 v2 단계 6)
+     예전에는 여기서 폼 맨 아래에 새로 그렸습니다. 이제 한 개를 계속 쓰므로 문구만 맞춥니다.
+     ⚠️ 저장 중(disabled)이면 setSubmitBusy 가 문구를 쥐고 있으니 건드리지 않습니다. */
+function syncSubmitBar_() {
+  const btn = document.getElementById('mfSubmitBtn');
+  if (!btn || btn.disabled) return;
+  btn.innerHTML = (S.editing && S.editing.inspId) ? '💾 수정 저장' : '📤 제출';
+}
+/* ── 열화상 측정 개소 (2026-11-26) ───────────────────────────────
+     카메라(Mileseey TP2 Plus 등)가 사진 위에 찍어 주는 숫자를 점검원이 옮겨 적습니다.
+     ⚠️ 사진 색으로 온도를 짐작해 채우지 않습니다 (CLAUDE.md §4-6).
+     저장: 점검기록표 열 4개에 개소를 「 | 」 로 이어 적습니다 (3상·숫자반복과 같은 모양).
+       thermal_part  부위          "접속함1 | MOF"
+       thermal_max   최고온도(℃)   "49.5 | 31.5"
+       thermal_ref   기준온도(℃)   "45.5 | 30.8"   ← 같은 종류의 정상 부위 (화면 최저값 아님)
+       thermal_diff  온도차(℃)     "4.0 | 0.7"     ← 최고−기준, 계산값(추정 아님 · 두 값이 다 있을 때만)
+     보고서: {{thermal_max}} 전체 · {{thermal_max.1}} 처럼 개소 번호로 (반복 슬롯 규칙 — 실데이터로 확인할 것).
+     화면 상태는 S.thermalRows 가 쥐고, 숨긴 item_thermal_* 칸을 늘 같이 고칩니다.
+     임시저장·수정 불러오기는 applyFormValues 가 숨긴 칸을 채운 뒤 thermalRestore_ 가 줄을 되살립니다. */
+const THERMAL_FIELDS = ['part', 'max', 'ref', 'diff'];
+
+function thermalRows_() {
+  if (!Array.isArray(S.thermalRows) || !S.thermalRows.length) S.thermalRows = [{ part: '', max: '', ref: '' }];
+  return S.thermalRows;
+}
+
+function thermalNum_(v) {
+  const t = String(v == null ? '' : v).replace(/,/g, '.').replace(/[℃°C\s]/gi, '');
+  if (!/^-?\d+(\.\d+)?$/.test(t)) return null;
+  return Number(t);
+}
+
+function thermalDiff_(row) {
+  const a = thermalNum_(row.max), b = thermalNum_(row.ref);
+  return (a === null || b === null) ? '' : (a - b).toFixed(1);
+}
+
+function thermalPack_() {
+  const rows = thermalRows_();
+  let last = rows.length - 1;
+  while (last >= 0 && !String(rows[last].part || '').trim() && !String(rows[last].max || '').trim() && !String(rows[last].ref || '').trim()) last--;
+  const out = { part: '', max: '', ref: '', diff: '' };
+  if (last < 0) return out;
+  const use = rows.slice(0, last + 1);
+  // 「|」 는 개소 구분자라 값 안에서는 뺍니다
+  const clean = v => String(v == null ? '' : v).replace(/\|/g, '/').trim();
+  out.part = use.map(r => clean(r.part)).join(' | ');
+  // 숫자로 읽히면 「45,5」 같은 쉼표 소수점을 점으로 맞춰 적습니다 (못 읽으면 적은 그대로)
+  const num = v => thermalNum_(v) === null ? clean(v) : String(v).replace(/,/g, '.').replace(/[℃°C\s]/gi, '');   // 「46.0」 은 46.0 그대로
+  out.max  = use.map(r => num(r.max)).join(' | ');
+  out.ref  = use.map(r => num(r.ref)).join(' | ');
+  out.diff = use.map(r => thermalDiff_(r)).join(' | ');
+  // 한 개소뿐이면 「 | 」 없이 값만
+  return out;
+}
+
+function thermalSyncHidden_() {
+  const p = thermalPack_();
+  THERMAL_FIELDS.forEach(k => {
+    const el = document.getElementById('item_thermal_' + k);
+    if (el) el.value = p[k];
+  });
+}
+
+function thermalRowsHtml_() {
+  return thermalRows_().map((r, i) => {
+    const d = thermalDiff_(r);
+    return `<div class="th-row" style="border:1px solid var(--border);border-radius:10px;padding:.45rem;margin-bottom:.4rem;">
+      <div style="display:flex;gap:.3rem;align-items:center;margin-bottom:.3rem;">
+        <b style="font-size:.8rem;min-width:1.4rem;">${i + 1}</b>
+        <input type="text" data-th="part" data-i="${i}" value="${escAttr(r.part || '')}" placeholder="부위 (예: 접속함1 단자 · MOF R상)" autocomplete="off" style="flex:1;">
+        <button type="button" onclick="thermalDelRow(${i})" title="이 줄 지우기" style="border:none;background:none;font-size:1.1rem;color:var(--muted);cursor:pointer;">×</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.3rem;align-items:center;">
+        <input type="text" inputmode="decimal" data-th="max" data-i="${i}" value="${escAttr(r.max || '')}" placeholder="최고 ℃" autocomplete="off">
+        <input type="text" inputmode="decimal" data-th="ref" data-i="${i}" value="${escAttr(r.ref || '')}" placeholder="기준 ℃" autocomplete="off">
+        <span class="th-diff" id="thDiff_${i}" style="font-size:.85rem;text-align:center;">${d === '' ? 'ΔT —' : 'ΔT ' + d + '℃'}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function thermalRender_() {
+  const el = document.getElementById('thermalRows');
+  if (el) el.innerHTML = thermalRowsHtml_();
+  thermalSyncHidden_();
+}
+
+function thermalAddRow() {
+  thermalRows_().push({ part: '', max: '', ref: '' });
+  thermalRender_();
+  const ins = document.querySelectorAll('#thermalRows input[data-th="part"]');
+  if (ins.length) ins[ins.length - 1].focus();
+}
+
+function thermalDelRow(i) {
+  const rows = thermalRows_();
+  rows.splice(i, 1);
+  thermalRender_();
+  if (typeof scheduleDraftSave === 'function') scheduleDraftSave();
+}
+
+/* 임시저장·수정 불러오기 — 숨긴 칸의 「 | 」 묶음을 줄로 되돌립니다 */
+function thermalRestore_() {
+  const get = k => { const el = document.getElementById('item_thermal_' + k); return el ? String(el.value || '') : ''; };
+  const sp = s => s === '' ? [] : s.split('|').map(x => x.trim());
+  const part = sp(get('part')), max = sp(get('max')), ref = sp(get('ref'));
+  const n = Math.max(part.length, max.length, ref.length);
+  if (!n) return;
+  S.thermalRows = [];
+  for (let i = 0; i < n; i++) S.thermalRows.push({ part: part[i] || '', max: max[i] || '', ref: ref[i] || '' });
+  thermalRender_();
+}
+
+// 입력은 위임 처리 — 줄이 다시 그려져도 살아 있습니다
+document.addEventListener('input', function (e) {
+  const t = e.target;
+  if (!t || !t.dataset || !t.dataset.th) return;
+  const row = thermalRows_()[Number(t.dataset.i)];
+  if (!row) return;
+  row[t.dataset.th] = t.value;
+  const d = thermalDiff_(row);
+  const dEl = document.getElementById('thDiff_' + t.dataset.i);
+  if (dEl) dEl.textContent = d === '' ? 'ΔT —' : 'ΔT ' + d + '℃';
+  thermalSyncHidden_();
+  if (typeof scheduleDraftSave === 'function') scheduleDraftSave();
+});
+
 // 열화상 사진 (H-11)
 function addThermalPhoto() {
   openImagePicker(true, previewThermal);
@@ -3484,12 +3819,17 @@ async function selectInspType(t) {
   // 복수 점검 지원 — 버튼 토글 방식 (예: 월차점검+측정)
   if (!Array.isArray(S.inspTypes)) S.inspTypes = [];
   const idx = S.inspTypes.indexOf(t);
+  if (!S.accOpen) S.accOpen = {};
   if (idx >= 0) {
     S.inspTypes.splice(idx, 1);   // 재탭 → 해제
   } else {
     S.inspTypes.push(t);          // 선택 추가
+    S.accOpen[t] = true;          // 처음 포함하면 펼쳐 줍니다 (2026-11-25)
   }
-  if (S.inspTypes.length === 0) S.inspTypes = [t]; // 최소 1개 유지
+  if (S.inspTypes.length === 0) {  // 최소 1개 유지
+    S.inspTypes = [t];
+    toast('점검구분은 하나 이상 포함해야 합니다');
+  }
   currentInspType = S.inspTypes.join('+');
 
   document.querySelectorAll('.insp-type-btn').forEach(b =>
@@ -3539,35 +3879,53 @@ function renderOXRow(item) {
   //  ⚠️ 예전에는 「📷」로만 새로 그려서, 접속함에 찍은 사진 개수가 사라지고
   //     그 뒤에 다른 항목(인버터)에 찍으면 그 항목만 카운트가 살아나
   //     "엉뚱한 항목에 표시된다"로 보이는 원인이었습니다.
+  /* 점검폼 v2 (2026-11-25) — 이름 줄 + 버튼 줄(48px 균등) + X 일 때 「불량 내용」
+       ⚠️ 판정은 처음에 【아무것도 안 고른 상태】 입니다 (예전: O 가 미리 골라져 있었음).
+          제출할 때 포함한 구분의 빈 판정만 O 로 채웁니다 (fillBlankOX_ · 사장님 11-25 결정).
+          빈 판정이 그대로 서버로 가면 최종 보고서에 「/」(해당없음) 으로 찍히므로 꼭 채워서 보냅니다.
+       ⚠️ 중첩 템플릿 리터럴을 쓰지 않습니다 — 조각을 먼저 만들고 한 번에 잇습니다. */
+  const camCnt = camCountText_('item_' + id, need);
   const camBtn = item.사진허용
-    ? `<button class="cam-btn" id="cam_item_${id}" type="button" onclick="takeItemPhotoMulti('item_${id}','${nameA}',${need || 1})">📷${getCamBadge('item_' + id) ? `<span class="cam-count">${getCamBadge('item_' + id)}</span>` : ''}</button>`
+    ? '<button class="cam-btn" id="cam_item_' + id + '" type="button" onclick="takeItemPhotoMulti(\'item_' + id + '\',\'' + nameA + '\',' + (need || 1) + ')">📷'
+      + (camCnt ? '<span class="cam-count">' + camCnt + '</span>' : '') + '</button>'
     : '';
 
   // 필수 사진 매수 배지
   const badge = need > 0
-    ? `<span class="photo-req-badge" id="pbadge_item_${id}">📷 ${need}장 필요</span>`
+    ? '<span class="photo-req-badge" id="pbadge_item_' + id + '">사진 ' + need + '장 필요</span>'
     : '';
 
   const triBtn = item.입력유형 === 'OX'
-    ? `<button type="button" class="ox-btn t" onclick="setOX('item_${id}','△')">△</button>` : '';
+    ? '<button type="button" class="ox-btn t" onclick="setOX(\'item_' + id + '\',\'△\')">△</button>' : '';
 
   // 「해당없음(/)」 — OX2_NA 항목에서 설비가 없는 발전소용 (H-13)
-  //   예전에는 naBtn = '' 로 고정되어 버튼이 아예 그려지지 않았습니다.
   const naBtn = item.입력유형 === 'OX2_NA'
-    ? `<button type="button" class="ox-btn na" onclick="setOX('item_${id}','/')" title="해당 설비 없음">/</button>` : '';
+    ? '<button type="button" class="ox-btn na" onclick="setOX(\'item_' + id + '\',\'/\')" title="해당 설비 없음">/<small>해당없음</small></button>' : '';
 
-  return `<div class="ox-row" id="row_item_${id}">
-    <div class="ox-name"><span>${escT_(item.항목명)}</span>${badge}</div>
-    <div class="ox-cam">
-      <div class="ox-grp">
-        <button type="button" class="ox-btn o sel" onclick="setOX('item_${id}','O')">O</button>
-        <button type="button" class="ox-btn x" onclick="setOX('item_${id}','X')">X</button>
-        ${triBtn}${naBtn}
-      </div>
-      ${camBtn}
-    </div>
-    <input type="hidden" id="item_${id}" value="O" data-default="O">
-  </div>`;
+  return '<div class="ox-row" id="row_item_' + id + '">'
+    + '<div class="ox-top"><div class="ox-name"><span class="ox-nm">' + escT_(item.항목명) + '</span>' + badge + '</div>' + camBtn + '</div>'
+    + '<div class="ox-grp">'
+    +   '<button type="button" class="ox-btn o" onclick="setOX(\'item_' + id + '\',\'O\')">O</button>'
+    +   '<button type="button" class="ox-btn x" onclick="setOX(\'item_' + id + '\',\'X\')">X</button>'
+    +   triBtn + naBtn
+    + '</div>'
+    + '<div class="ox-detail"><label for="item_' + id + '_memo">불량 내용</label>'
+    +   '<textarea id="item_' + id + '_memo" placeholder="예) 3번 스트링 커넥터 변색"></textarea></div>'
+    + '<input type="hidden" id="item_' + id + '" value="">'
+    + '</div>';
+}
+
+/* 📷 버튼 숫자 — 필요 매수가 있으면 「찍은수/필요수」, 없으면 찍은 수만 (2026-11-25) */
+function camCountText_(itemId, need) {
+  const n = ((S.photoMap && S.photoMap[itemId]) || []).length;
+  if (need > 0) return n + '/' + need;
+  return n > 0 ? String(n) : '';
+}
+/* 점검항목원장의 최소사진수 — updatePhotoCount 가 매수를 못 받았을 때 (이어서 작성 등) */
+function needOf_(itemId) {
+  const id = String(itemId || '').replace(/^item_/, '');
+  const it = (S.checkItems || []).find(x => x.항목ID === id);
+  return it ? (Number(it.최소사진수) || 0) : 0;
 }
 
 function renderOXInline(id) {
@@ -3579,15 +3937,35 @@ function renderOXInline(id) {
   </div>`;
 }
 
-function setOX(id, val) {
+/**
+ * 판정 고르기 (2026-11-25 점검폼 v2)
+ *  @param force  true = 값 되살리기(임시저장·수정·다시 그리기). 같은 값이어도 풀지 않고 그대로 칠합니다.
+ *                없음 = 사람이 누름. 같은 버튼을 다시 누르면 선택이 풀립니다('').
+ *  X 면 「불량 내용」 칸이 열리고, 다른 값이면 접힙니다 (적은 글은 지우지 않음 — 제출 땐 X 일 때만 모읍니다).
+ */
+function setOX(id, val, force) {
   const inp = document.getElementById(id);
-  if (inp) inp.value = val;
-  const row = inp?.closest('.ox-row') || inp?.parentElement;
+  if (!inp) return;
+  let v = String(val == null ? '' : val);
+  if (!force && inp.value === v) v = '';        // 같은 버튼 다시 누름 → 풀기
+  inp.value = v;
+  const row = inp.closest('.ox-row') || inp.parentElement;
   if (!row) return;
   row.querySelectorAll('.ox-btn').forEach(b => b.classList.remove('sel'));
   const map = {'O':'o','X':'x','△':'t','/':'na'};
-  const cls = map[val];
-  if (cls) { const btn = row.querySelector(`.ox-btn.${cls}`); if (btn) btn.classList.add('sel'); }
+  const cls = map[v];
+  if (cls) { const btn = row.querySelector('.ox-btn.' + cls); if (btn) btn.classList.add('sel'); }
+  row.classList.toggle('v-X', v === 'X');
+  if (!force && v === 'X') {
+    const memo = document.getElementById(id + '_memo');
+    if (memo) setTimeout(() => { try { memo.focus(); } catch (_) {} }, 30);
+  }
+  // 사진 버튼 색(판정했는데 부족 = 주황)도 판정에 따라 달라집니다
+  if (typeof updatePhotoCount === 'function' && S.photoMap) updatePhotoCount(id);
+  if (!force) {
+    if (typeof scheduleDraftSave === 'function') scheduleDraftSave();   // 버튼은 input 이벤트가 안 나서 직접 예약
+  }
+  if (typeof updateFormProgress === 'function') updateFormProgress();
 }
 function renderDefaultCheckItems(inspType) {
   const type = inspType || '월차점검';
@@ -3623,34 +4001,10 @@ function renderDefaultCheckItems(inspType) {
   let html = `<div class="ox-table">`;
   items.forEach(item => {
     if (item.type === 'OX2' || item.type === 'OX2_NA') {
-      const isNA  = item.type === 'OX2_NA';
-      // ⚠️ 예전 else 분기는 백틱 안에서 \${…} 로 잘못 이스케이프되어 있어
-      //    화면에 "${getCamBadge('item_' + item.id)}" 가 글자 그대로 찍혔습니다. (M-1)
-      //    오프라인에서 점검항목을 못 받아오면 이 폴백이 실제로 실행됩니다.
-      const nameA = escAttr(item.name);
-      const need  = item.minPhoto || 0;
-      const camCnt = getCamBadge('item_' + item.id);
-      const camBtn = `<button type="button" class="cam-btn" id="cam_item_${item.id}"
-            onclick="takeItemPhotoMulti('item_${item.id}','${nameA}',${need || 1})">📷${camCnt ? `<span class="cam-count">${camCnt}</span>` : ''}</button>`;
-      // OX2_NA(접속반 등)는 설비가 없는 발전소용 「/」 버튼이 있어야 합니다.
-      // 시트 기반 renderOXRow에는 H-13으로 넣었는데 이 폴백에는 빠져 있었습니다 (2026-09-04 · R-4)
-      const naBtnF = isNA
-        ? `<button type="button" class="ox-btn na" onclick="setOX('item_${item.id}','/')" title="해당 설비 없음">/</button>` : '';
-
-      html += `<div class="ox-row" id="row_item_${item.id}">
-        <div class="ox-name">
-          <span>${item.name}</span>
-        </div>
-        <div class="ox-cam">
-          <div class="ox-grp">
-            <button type="button" class="ox-btn o sel" onclick="setOX('item_${item.id}','O')">O</button>
-            <button type="button" class="ox-btn x" onclick="setOX('item_${item.id}','X')">X</button>
-            ${naBtnF}
-          </div>
-          ${camBtn}
-        </div>
-        <input type="hidden" id="item_${item.id}" value="O" data-default="O">
-      </div>`;
+      /* 점검항목을 못 받은 기기용 폴백도 시트 기반과 같은 한 줄을 씁니다 (2026-11-25 점검폼 v2)
+         예전에는 같은 모양을 여기에 따로 적어 두어, 한쪽만 고쳐지는 일이 되풀이됐습니다(M-1·R-4). */
+      html += renderOXRow({ 항목ID: item.id, 항목명: item.name, 입력유형: item.type,
+                            최소사진수: item.minPhoto || 0, 사진허용: true });
     } else if (item.type === '숫자') {
       html += `</div><div class="fg">
         <label>${item.name}</label>
@@ -3692,7 +4046,8 @@ function openPhotoInput(itemId, label, minCount, multiple) {
     if (!files.length) return;
     toast(`사진 처리 중... (${files.length}장)`);
     const r = await appendPhotos_(itemId, label, files);
-    updatePhotoCount(itemId, minCount);
+    // 매수 기준은 점검항목원장 최소사진수 (버튼에 넘기는 need||1 은 「여러 장 고르기」 용이라 기준으로 안 씀 · 2026-11-25)
+    updatePhotoCount(itemId);
 
     if (r.saved === 0) { toast('사진을 읽지 못했습니다. 다시 시도해 주세요.'); return; }
     toast(`📷 ${label} ${r.saved}장 추가 · ${fmtSize(r.before)} → ${fmtSize(r.after)}`);
@@ -3726,12 +4081,20 @@ function uniquePhotoName_(name) {
   return tag + '_' + base;
 }
 
+const THERMAL_RAW_MAX = 3 * 1024 * 1024;
 async function appendPhotos_(itemId, label, files) {
   if (!S.photoMap) S.photoMap = {};
   if (!S.photoMap[itemId]) S.photoMap[itemId] = [];
   let saved = 0, before = 0, after = 0;
   for (const f of (files || [])) {
-    const b64 = await compressImage(f);
+    /* 열화상은 원본 그대로 올립니다 (2026-11-26)
+         다시 저장(1600px·품질 70%)하면 사진에 찍힌 온도 글자가 번지고,
+         파일 속 온도 자료가 있다면 그것도 지워집니다 (CLAUDE.md §4-6 「원본 압축 없이 보존」).
+         열화상 사진은 보통 20~200KB 라 부담이 없습니다. 3MB 를 넘는 것만 덜 줄여서(2400px·0.92) 올립니다. */
+    const 열화상원본 = itemId === 'thermal' && f && f.size <= THERMAL_RAW_MAX;
+    const b64 = 열화상원본
+      ? await new Promise(res => readFileAsDataUrl(f, res))
+      : await compressImage(f, itemId === 'thermal' ? { maxSide: 2400, quality: 0.92 } : undefined);
     if (!b64) continue;
     before += f.size;
     after  += dataUrlBytes(b64);
@@ -3743,20 +4106,30 @@ async function appendPhotos_(itemId, label, files) {
   return { saved, before, after };
 }
 
+/* 📷 버튼·배지 다시 칠하기 (2026-11-25 점검폼 v2)
+     표시는 「📷 찍은수/필요수」. 색: 채움 = 초록(done) · 판정했는데 모자람 = 주황(short) · 아직 판정 전 = 회색.
+     「/」(해당없음) 이면 사진이 면제라 초록으로 봅니다 (validateRequiredPhotos 와 같은 규칙).
+     minCount 를 안 주면 점검항목원장의 최소사진수를 찾아 씁니다 (이어서 작성 경로). */
 function updatePhotoCount(itemId, minCount) {
-  const photos = S.photoMap[itemId] || [];
+  const photos = (S.photoMap && S.photoMap[itemId]) || [];
   const count  = photos.length;
+  const need   = (minCount === undefined || minCount === null) ? needOf_(itemId) : (Number(minCount) || 0);
+  const valEl  = document.getElementById(itemId) || document.getElementById('item_' + itemId);
+  const val    = valEl && valEl.type === 'hidden' ? valEl.value : '';
+  const ok     = val === '/' || (need ? count >= need : count > 0);
   const btn = document.getElementById(`cam_${itemId}`) || document.getElementById(`cam_item_${itemId}`);
   if (btn) {
-    btn.innerHTML = `📷${count > 0 ? `<span class="cam-count"> ${count}</span>` : ''}`;
-    const isSatisfied = minCount ? count >= minCount : count > 0;
-    btn.classList.toggle('done', isSatisfied);
-    btn.style.borderColor = isSatisfied ? 'var(--ok)' : '';
+    const t = camCountText_(itemId, need);
+    btn.innerHTML = '📷' + (t ? '<span class="cam-count">' + t + '</span>' : '');
+    btn.classList.toggle('done', ok && (count > 0 || val === '/'));
+    btn.classList.toggle('short', !ok && !!need && !!val);
+    btn.style.borderColor = '';
   }
   const badge = document.getElementById(`pbadge_${itemId}`);
   if (badge) {
-    badge.classList.toggle('satisfied', count >= (minCount || 1));
+    badge.classList.toggle('satisfied', val === '/' || count >= (need || 1));
   }
+  if (typeof updateFormProgress === 'function') updateFormProgress();
 }
 /**
  * 필수 사진 매수 검증 (H-4)
@@ -4030,6 +4403,9 @@ function autoSlash(el, maxCnt) {
     try { el.setSelectionRange(el.value.length, el.value.length); } catch(_) {}
   }
   const parts = el.value.split('/').filter(p=>p!=='');
+  // 채널 칩 다시 그리기 — 🎲 자동입력도 input 이벤트로 여기를 지나므로 칩에 그대로 나옵니다 (2026-11-25)
+  if (el.classList && el.classList.contains('ch-input')) renderChGrid_(el);
+  if (typeof updateFormProgress === 'function') updateFormProgress();
   const st = findChStatus(el);
   if (!st) return;
   if (parts.length > maxCnt) { st.textContent=`⚠️ 채널 초과 (${parts.length}/${maxCnt})`; st.style.color='var(--ng)'; }
@@ -4077,40 +4453,67 @@ async function validateCh(el, maxCnt, label, slot) {
      ⚠️ 채널전류 입력만으로는 대장이 안 바뀝니다 (10-30 결정 — 6개만 잰 사실이 사라지지 않게).
         점검자가 이 버튼으로 【확인하고】 고칠 때만 바뀝니다.
      ⚠️ 통신이 될 때만 됩니다 — 대장을 바로 고치는 일이라 대기함에 쌓지 않습니다. */
-async function editChannel(i) {
+/* 2026-11-25: prompt()/confirm() → 화면 안 창(#chEditBg).
+   앱 안 브라우저·일부 웹뷰는 prompt() 를 막아 버튼을 눌러도 아무 일도 없었습니다(오류도 안 보임). */
+function editChannel(i) {
   const site  = S.currentSite;
   const equip = S.currentEquip || {};
   const ch = (equip.channels || [])[i];
-  if (!site || !ch) return;
+  if (!site || !ch) { toast('이 채널 정보를 찾지 못했습니다 — 화면을 닫았다 다시 열어 주세요', 3500); return; }
   if (!S.isOnline) {
     toast('통신이 될 때만 고칠 수 있습니다 — 지금은 특이사항에 「번호·채널수」 를 적어 주세요', 4500);
     return;
   }
   const 옛이름 = String(ch.label || '').trim();
   const 옛수 = Number(ch.count) || 0;
-  const 이름입력 = prompt(`[${옛이름 || ('No' + ch.slot)}] 이름 — 인버터·접속함 번호 (예: INV5 · A-3)`, 옛이름);
-  if (이름입력 === null) return;
-  const 이름 = String(이름입력).trim();
-  const 수입력 = prompt(`[${이름 || 옛이름}] 채널(스트링) 수`, String(옛수 || ''));
-  if (수입력 === null) return;
-  const 수 = parseInt(String(수입력).trim(), 10);
-  if (!(수 >= 1 && 수 <= 60) || String(수) !== String(수입력).trim()) {
+  S.chEditIdx = i;
+  document.getElementById('chEditLead').textContent =
+    '지금: ' + (옛이름 || ('No' + ch.slot)) + ' · ' + 옛수 + '채널';
+  document.getElementById('chEditName').value = 옛이름;
+  document.getElementById('chEditCount').value = 옛수 ? String(옛수) : '';
+  document.getElementById('chEditWhy').value = '현장 확인';
+  const go = document.getElementById('chEditGo');
+  go.disabled = false; go.textContent = '대장에 저장';
+  document.getElementById('chEditBg').classList.add('show');
+}
+function closeChEdit() {
+  document.getElementById('chEditBg')?.classList.remove('show');
+  S.chEditIdx = null;
+}
+async function saveChEdit() {
+  const i = S.chEditIdx;
+  const site  = S.currentSite;
+  const equip = S.currentEquip || {};
+  const ch = (i == null) ? null : (equip.channels || [])[i];
+  if (!site || !ch) { closeChEdit(); return; }
+  const 옛이름 = String(ch.label || '').trim();
+  const 옛수 = Number(ch.count) || 0;
+  const 이름 = String(document.getElementById('chEditName').value || '').trim();
+  const 수입력 = String(document.getElementById('chEditCount').value || '').trim();
+  const 수 = parseInt(수입력, 10);
+  if (!(수 >= 1 && 수 <= 60) || String(수) !== 수입력) {
     toast('채널 수는 1~60 사이 숫자로 적어 주세요', 3500);
+    document.getElementById('chEditCount').focus();
     return;
   }
   if (이름 === 옛이름 && 수 === 옛수) { toast('바뀐 것이 없습니다'); return; }
-  const 사유 = prompt('고친 까닭 (예: 명판 확인 · 접속함 번호 다시 셈)', '현장 확인');
-  if (사유 === null) return;
-  if (!confirm(`대장을 고칩니다\n\n${옛이름 || ('No' + ch.slot)} (${옛수}채널)\n→ ${이름 || ('No' + ch.slot)} (${수}채널)\n\n`
-             + `두 대장에 같이 적히고, 누가·언제 고쳤는지 남습니다.`)) return;
+  const 사유 = String(document.getElementById('chEditWhy').value || '').trim() || '현장 확인';
+  if (!S.isOnline) { toast('통신이 끊겼습니다 — 다시 연결되면 저장해 주세요', 4000); return; }
 
-  const r = await api('updateChannelCount', {
-    no: site.no, slot: ch.slot, newCount: 수, newLabel: 이름, 사유: String(사유).trim()
-  });
+  const go = document.getElementById('chEditGo');
+  go.disabled = true; go.textContent = '저장 중…';
+  let r = null;
+  try {
+    r = await api('updateChannelCount', {
+      no: site.no, slot: ch.slot, newCount: 수, newLabel: 이름, 사유: 사유
+    });
+  } catch (e) { r = { success: false, error: '통신 실패' }; }
+  go.disabled = false; go.textContent = '대장에 저장';
   if (!r || !r.success) {
     toast('❌ 못 고쳤습니다 — ' + ((r && r.error) || '통신 실패'), 4500);
     return;
   }
+  closeChEdit();
   /* 화면·받아둔 설비정보도 같이 바꿉니다 — 안 바꾸면 다시 열 때 옛 값이 그려집니다 */
   if (이름) ch.label = 이름;
   ch.count = 수;
@@ -4238,13 +4641,22 @@ function collectFormData() {
     if (안고른칸(el)) return;
     if (!(key in items)) items[key] = el.value;
   });
-  document.querySelectorAll('[id$="_memo"]').forEach(el => {
-    const baseKey = el.id.replace('item_','').replace('_memo','');
+  /* 「불량 내용」 — X 를 고른 항목의 메모를 【불량내용 한 열】 에 모읍니다 (2026-11-25 사장님 결정)
+       모양: 한 줄에 하나 「[항목명] 내용」. 보고서에서는 {{불량내용}} 으로 읽을 수 있습니다.
+       ⚠️ 예전처럼 항목마다 V_MODULE_memo 키로 보내면 점검기록표에 항목마다 새 열이 생깁니다.
+       ⚠️ X 가 아니거나, 포함 안 한 구분 칸이면 모으지 않습니다. 되살리기는 applyFormValues 가 이 글을 다시 나눕니다. */
+  const 불량 = [];
+  document.querySelectorAll('textarea[id^="item_"][id$="_memo"]').forEach(el => {
+    const baseKey = el.id.replace(/^item_/, '').replace(/_memo$/, '');
     const valEl = document.getElementById(`item_${baseKey}`);
-    if (valEl?.value === 'X' && el.value.trim()) {
-      items[`${baseKey}_memo`] = el.value.trim();
-    }
+    if (!valEl || valEl.value !== 'X' || 안고른칸(valEl)) return;
+    const t = String(el.value || '').trim();
+    if (t) 불량.push('[' + oxItemName_(baseKey) + '] ' + t.replace(/\s*\n\s*/g, ' '));
   });
+  // 수정 모드: 화면에서 짝을 못 찾은 옛 줄도 그대로 다시 보냅니다 · 다 지웠으면 빈 값으로 덮어씁니다
+  if (S.editing && S.defectKeep && S.defectKeep.length) S.defectKeep.forEach(t => 불량.push(t));
+  if (불량.length) items['불량내용'] = 불량.join('\n');
+  else if (S.editing && S.defectHad) items['불량내용'] = '';
 
   // ── C-1: 호기·접속반별 값을 항목당 한 열로 묶습니다 ──
   //  예전에는 item_R_ACB_V_1, _2 … 가 각각 별도 열이 되어
@@ -4369,8 +4781,41 @@ function collectFormData() {
   if (em) Object.assign(out, em);
   return out;
 }
+/* O/X 항목 이름 — 「불량내용」 줄 머리에 씁니다. 화면에 보이는 이름 = 점검항목원장 항목명 */
+function oxItemName_(id) {
+  const it = (S.checkItems || []).find(x => x.항목ID === id);
+  if (it && it.항목명) return String(it.항목명).trim();
+  const nm = document.querySelector('#row_item_' + CSS.escape(id) + ' .ox-nm');
+  return nm ? nm.textContent.trim() : id;
+}
+
+/* 포함 안 한 점검구분 아코디언 안의 칸인가 — collectFormData 의 「안고른칸」 과 같은 규칙 */
+function isExcludedEl_(el) {
+  const body = el && el.closest && el.closest('[id^="accBody_"]');
+  return !!body && (S.inspTypes || []).indexOf(body.id.replace('accBody_', '')) < 0;
+}
+
+/**
+ * 제출할 때 빈 판정을 O 로 채웁니다 (2026-11-25 사장님 결정 · 점검폼 v2 단계 1)
+ *  화면은 판정을 고르지 않은 채로 시작하고, 포함한 구분의 빈 판정만 여기서 O 로 보냅니다.
+ *  ⚠️ 빈 채로 보내면 최종 보고서가 판정칸을 「/」(해당없음) 으로 찍습니다 — 본 설비가 「설비 없음」 이 됩니다.
+ *  화면(DOM)은 바꾸지 않고 보낼 자료(d.items)만 채웁니다. @return 채운 개수
+ */
+function fillBlankOX_(d) {
+  let n = 0;
+  if (!d || !d.items) return 0;
+  document.querySelectorAll('#formEl .ox-row input[type="hidden"][id^="item_"]').forEach(el => {
+    if (el.value !== '' || isExcludedEl_(el)) return;
+    d.items[el.id.replace(/^item_/, '')] = 'O';
+    n++;
+  });
+  return n;
+}
+
 function setSubmitBusy(busy, text) {
-  const btn = document.querySelector('#mt-form .btn-ok');
+  /* id 로 찾습니다 (2026-11-25) — '#mt-form .btn-ok' 는 미결사항 배너의 「✅ 확인완료」(btn-ok) 가
+     먼저 걸려, 미결이 있는 발전소에서는 제출 버튼 대신 그 버튼이 잠기고 문구가 바뀌었습니다. */
+  const btn = document.getElementById('mfSubmitBtn') || document.querySelector('#mt-form .btn-ok');
   if (!btn) return;
   btn.disabled = !!busy;
   // 수정 모드에서는 버튼 문구가 「수정 저장」으로 유지되어야 합니다
@@ -4401,6 +4846,9 @@ async function submitForm() {
   //  제출은 그대로 진행하고, 부족 내역만 서버 「검토메모」에 남겨 관리자가 확인합니다.
   const shortage = validateRequiredPhotos();
   if (shortage.length) d.photoShortage = shortage;
+
+  // 안 고른 판정 → O (화면은 그대로, 보낼 자료만) — 수정 저장도 같은 규칙 (2026-11-25)
+  fillBlankOX_(d);
 
   // 수정 모드는 별도 경로 — 대기함을 거치지 않고 서버 행을 직접 갱신합니다
   if (S.editing && S.editing.inspId) return submitEdit(d);
@@ -4537,7 +4985,7 @@ async function submitEdit(d) {
     S.draftOff = true;
     if (typeof _draftTimer !== 'undefined' && _draftTimer) clearTimeout(_draftTimer);
     S.editing = null;
-    S.photoMap = {};
+    S.photoMap = {}; S.thermalRows = null;
     const formEl = document.getElementById('formEl');
     if (formEl) formEl.innerHTML = '';
     currentInspType = '월차점검';
@@ -5041,10 +5489,243 @@ function switchMTab(name) {
   ['info','form','np'].forEach(t => {          // np = 📷 명판 사진 (2026-11-15)
     document.getElementById(`mt-${t}`)?.classList.toggle('active', t===name);
   });
+  // 고정 머리의 ‹(기본정보로)·진행률은 점검폼에서만 (2026-11-25)
+  const back = document.getElementById('mfBack');
+  if (back) back.style.display = name === 'form' ? '' : 'none';
+  const prog = document.getElementById('mfProg');
+  if (prog) prog.style.display = (name === 'form' && !S.emergencyMode) ? '' : 'none';
   if (name === 'form' && !document.getElementById('formEl').innerHTML) {
     buildForm(currentInspType);
   }
+  if (name === 'form') updateFormProgress();
 }
+
+/* ══════════════════════════════════════════════════════════════
+   점검폼 v2 — 진행률 · 하단 요약 · 제출 전 확인 · 채널 칩 (2026-11-25)
+   ──────────────────────────────────────────────────────────────
+   화면만 바꿉니다. 보낼 자료는 collectFormData 가 그대로 만들고,
+   빈 판정 O 채우기(fillBlankOX_)만 submitForm 에서 더합니다.
+   셈은 【포함(☑)한 구분】 만 — 안 고른 구분은 제출에서 빠지니 세지 않습니다.
+   ══════════════════════════════════════════════════════════════ */
+let _progRaf = 0;
+function updateFormProgress() {
+  if (_progRaf) return;
+  const run = function () { _progRaf = 0; try { updateFormProgressNow_(); } catch (e) { console.warn('진행률 계산 실패', e); } };
+  _progRaf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame(run) : setTimeout(run, 16);
+}
+
+/* 지금 화면의 셈 — 하단 바·확인 시트·아코디언 배지가 같은 숫자를 씁니다 */
+function formStats_() {
+  const types = S.inspTypes || [];
+  const per = {};                 // 구분별 { done, total }
+  const add = (t, done) => { if (!per[t]) per[t] = { done: 0, total: 0 }; per[t].total++; if (done) per[t].done++; };
+  const blankOX = [], xRows = [], xNoMemo = [], chShort = [];
+  let chBlank = 0;
+  types.forEach(t => {
+    const body = document.getElementById('accBody_' + t);
+    if (!body) return;
+    body.querySelectorAll('.ox-row input[type="hidden"][id^="item_"]').forEach(h => {
+      add(t, h.value !== '');
+      if (h.value === '') blankOX.push(h);
+      if (h.value === 'X') {
+        xRows.push(h);
+        const m = document.getElementById(h.id + '_memo');
+        if (!m || !m.value.trim()) xNoMemo.push(h);
+      }
+    });
+    body.querySelectorAll('input.ch-input').forEach(c => {
+      const max = Number(c.dataset.max) || 0;
+      const n = String(c.value || '').split('/').filter(p => p.trim() !== '').length;
+      add(t, max > 0 && n === max);
+      if (max > 0 && n < max) { chBlank += (max - n); chShort.push({ el: c, n: n, max: max }); }
+    });
+    body.querySelectorAll('.ph-set input[id^="item_"]').forEach(p => {
+      add(t, String(p.value || '').split('/').filter(x => x.trim() !== '').length >= 3);
+    });
+  });
+  const photoShort = (typeof validateRequiredPhotos === 'function') ? validateRequiredPhotos() : [];
+  return { types, per, blankOX, xRows, xNoMemo, chShort, chBlank, photoShort };
+}
+
+function updateFormProgressNow_() {
+  const formEl = document.getElementById('formEl');
+  if (!formEl || !formEl.innerHTML) return;
+  const st = formStats_();
+  let d = 0, t = 0;
+  const parts = [];
+  st.types.forEach(ty => {
+    const p = st.per[ty];
+    if (!p || !p.total) return;
+    d += p.done; t += p.total;
+    parts.push(escT_(ty) + ' <b>' + p.done + '/' + p.total + '</b>');
+  });
+  const fill = document.getElementById('mfProgFill');
+  if (fill) fill.style.width = t ? (d / t * 100) + '%' : '0';
+  const L = document.getElementById('mfProgL'), R = document.getElementById('mfProgR');
+  if (L) L.innerHTML = parts.join(' · ');
+  if (R) R.innerHTML = t ? '<b>' + Math.round(d / t * 100) + '%</b>' : '';
+
+  // 아코디언 배지 — 포함한 구분은 「한것/전체」, 안 한 구분은 「미포함」
+  document.querySelectorAll('.acc-cnt[id^="accCnt_"]').forEach(el => {
+    const ty = el.id.replace('accCnt_', '');
+    const on = st.types.indexOf(ty) >= 0;
+    const p = st.per[ty];
+    el.textContent = on ? (p && p.total ? p.done + '/' + p.total : '') : '미포함';
+    el.classList.toggle('done', !!(on && p && p.total && p.done === p.total));
+  });
+
+  // 하단 바 요약
+  const b = [];
+  if (S.emergencyMode) {
+    const fd = document.getElementById('item_fault_desc');
+    const es = document.getElementById('f_em_status');
+    if (fd && !fd.value.trim()) b.push('<span class="w">장애현상 빈칸</span>');
+    if (es && !es.value) b.push('<span class="w">처리결과 미선택</span>');
+  } else {
+    if (st.blankOX.length)    b.push('<span class="m">미선택 ' + st.blankOX.length + '</span>');
+    if (st.photoShort.length) b.push('<span class="w">사진부족 ' + st.photoShort.length + '</span>');
+    if (st.xRows.length)      b.push('<span class="e">X ' + st.xRows.length + '</span>');
+    if (st.chBlank)           b.push('<span class="w">채널빈칸 ' + st.chBlank + '</span>');
+  }
+  if (!b.length) b.push('<span class="g">✓ 확인할 것 없음</span>');
+  const sum = document.getElementById('mfBarSum');
+  if (sum) sum.innerHTML = b.join('');
+
+  // 기본정보 한 줄 요약
+  renderBasicSummary_();
+}
+
+/* 일자·시각·회차를 한 줄로 — 펼치지 않아도 맞는지 보입니다 */
+function renderBasicSummary_() {
+  const host = document.getElementById('mfBasicChips');
+  if (!host) return;
+  const v = id => (document.getElementById(id) || {}).value || '';
+  const ds = v('f_date');
+  let dTxt = '-';
+  if (ds) {
+    const dt = new Date(ds + 'T00:00:00');
+    if (!isNaN(dt)) dTxt = (dt.getMonth() + 1) + '/' + dt.getDate() + '(' + '일월화수목금토'[dt.getDay()] + ')';
+  }
+  const seqEl = document.getElementById('f_seq');
+  const seqTxt = seqEl && seqEl.selectedIndex >= 0 && seqEl.options[seqEl.selectedIndex]
+    ? seqEl.options[seqEl.selectedIndex].text : v('f_seq');
+  host.innerHTML = '<span>' + escT_(dTxt) + ' ' + escT_(v('f_time')) + '</span>'
+                 + (seqTxt ? '<span>' + escT_(seqTxt) + '</span>' : '');
+}
+
+/* ── 채널 칩 ── 입력값을 칸별로 (평균의 70% 미만 주황, 채널수를 넘으면 빨강) */
+function renderChGrid_(el) {
+  if (!el || !el.id) return;
+  const host = document.getElementById(el.id.replace(/^ch_/, 'chg_'));
+  if (!host) return;
+  const max = Number(el.dataset.max) || 0;
+  const parts = String(el.value || '').split('/');
+  const nums = parts.map(p => p.trim() === '' ? null : Number(p));
+  const filled = nums.filter(n => n !== null && !isNaN(n));
+  const avg = filled.length ? filled.reduce((a, b) => a + b, 0) / filled.length : 0;
+  const cells = [];
+  const len = Math.max(max, nums.length);
+  for (let k = 0; k < len; k++) {
+    const n = nums[k];
+    let cls = 'wait', txt = '·';
+    if (n !== null && n !== undefined && !isNaN(n)) {
+      txt = parts[k].trim();          // 적은 글자 그대로 (2.0 → 2 로 바뀌지 않게)
+      cls = k >= max ? 'over' : ((avg && n < avg * 0.7) ? 'low' : 'ok');
+    } else if (k >= max) {
+      continue;
+    }
+    cells.push('<div class="ch-cell ' + cls + '"><i>' + (k + 1) + '</i><b>' + escT_(txt) + '</b></div>');
+  }
+  host.innerHTML = cells.join('');
+}
+
+/* 3상 입력 아래 A·B·C 나눠 보기 */
+function renderPhSplit_(el) {
+  if (!el || !el.id) return;
+  const host = document.getElementById('phs_' + el.id);
+  if (!host) return;
+  const p = String(el.value || '').split('/');
+  host.innerHTML = ['A', 'B', 'C'].map((L, k) =>
+    '<span><em>' + L + '</em>' + escT_((p[k] || '').trim() || '—') + '</span>').join('');
+}
+
+/* 값을 코드로 되살린 뒤(임시저장·수정·다시 그리기) 칩·3상·사진 표시를 한 번에 다시 칠합니다 */
+function refreshChGrids_() {
+  document.querySelectorAll('#formEl input.ch-input').forEach(renderChGrid_);
+  document.querySelectorAll('#formEl .ph-set input[id^="item_"]').forEach(renderPhSplit_);
+  updateFormProgress();
+}
+
+/* ── 제출 전 확인 ── 막지 않습니다. 빠진 것을 보여 주고 [보기] 로 데려갑니다 */
+function openSubmitSheet() {
+  const btn = document.getElementById('mfSubmitBtn');
+  if (btn && btn.disabled) return;                       // 저장 중
+  const st = formStats_();
+  const L = [];
+  const row = (color, html, go) => '<li><span class="dot" style="background:' + color + '"></span><span>' + html + '</span>'
+    + (go ? '<button type="button" class="go" onclick="' + go + '">보기</button>' : '') + '</li>';
+  S._sheetTargets = [];
+  const target = el => { S._sheetTargets.push(el); return 'jumpToEl_(' + (S._sheetTargets.length - 1) + ')'; };
+
+  if (S.emergencyMode) {
+    const fd = document.getElementById('item_fault_desc');
+    const es = document.getElementById('f_em_status');
+    if (fd && !fd.value.trim()) L.push(row('#f59e0b', '장애 현상이 비었습니다', target(fd)));
+    if (es && !es.value) L.push(row('#f59e0b', '처리결과(처리완료/미처리)를 고르지 않았습니다', target(es.closest('.fg') || es)));
+  } else {
+    L.push(row('#2563eb', '포함 구분: <b>' + (st.types.map(escT_).join(' + ') || '없음') + '</b>'));
+    if (st.blankOX.length) {
+      L.push(row('#94a3b8', '판정 미선택 ' + st.blankOX.length + '개 — <b>제출하면 O(양호)로 기록됩니다</b>',
+        target(st.blankOX[0].closest('.ox-row'))));
+    }
+    st.xRows.forEach(h => {
+      const memo = document.getElementById(h.id + '_memo');
+      const t = memo && memo.value.trim();
+      L.push(row('#dc2626', '불량(X) — ' + escT_(oxItemName_(h.id.replace(/^item_/, '')))
+        + (t ? ' · ' + escT_(t) : ' · <b>불량 내용 없음</b>'), target(h.closest('.ox-row'))));
+    });
+    st.photoShort.forEach(msg => L.push(row('#f59e0b', '사진 부족 — ' + escT_(msg))));
+    st.chShort.forEach(c => {
+      const lbl = c.el.closest('.ch-group');
+      const name = lbl && lbl.dataset.label ? lbl.dataset.label : '채널';
+      L.push(row('#f59e0b', escT_(name) + ' 채널 ' + c.n + '/' + c.max + ' 입력', target(c.el)));
+    });
+    if (L.length === 1) L.push(row('#16a34a', '빠진 것이 없습니다'));
+  }
+  if (S.emergencyMode && !L.length) L.push(row('#16a34a', '빠진 것이 없습니다'));
+
+  document.getElementById('mfSumList').innerHTML = L.join('');
+  const go = document.getElementById('mfSheetGo');
+  if (go) go.textContent = (S.editing && S.editing.inspId) ? '그대로 수정 저장' : '그대로 제출';
+  document.getElementById('mfSheetBg').classList.add('show');
+}
+function closeSubmitSheet() {
+  document.getElementById('mfSheetBg')?.classList.remove('show');
+}
+function submitFromSheet_() {
+  closeSubmitSheet();
+  submitForm();
+}
+/* [보기] — 그 줄이 있는 아코디언을 펼치고 그리로 스크롤해 깜빡입니다 */
+function jumpToEl_(i) {
+  const el = (S._sheetTargets || [])[i];
+  closeSubmitSheet();
+  if (!el || !document.body.contains(el)) return;
+  const body = el.closest('[id^="accBody_"]');
+  if (body) setAccOpen_(body.id.replace('accBody_', ''), true);
+  setTimeout(() => {
+    try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) { el.scrollIntoView(); }
+    el.classList.remove('mf-flash'); void el.offsetWidth; el.classList.add('mf-flash');
+  }, 30);
+}
+
+// 점검폼 안의 입력이 바뀌면 진행률·요약을 다시 셉니다 (한 프레임에 한 번)
+document.addEventListener('input', function (e) {
+  if (e.target && e.target.closest && e.target.closest('#mt-form')) updateFormProgress();
+});
+document.addEventListener('change', function (e) {
+  if (e.target && e.target.closest && e.target.closest('#mt-form')) updateFormProgress();
+});
 /* ══════════════════════════════════════════════════════════
    서버와 이야기하는 부분  (PWA 빌드에서 교체된 곳)
 
@@ -5172,7 +5853,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = 'f42bcb3e';
+  var BUILD = 'c831137f';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
