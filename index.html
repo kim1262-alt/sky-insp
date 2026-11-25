@@ -3830,6 +3830,23 @@ function prefetchCheckItems(site) {
   }).catch(() => {});
 }
 
+/* 새 점검은 점검구분을 전부 체크한 채로 시작합니다 (2026-11-26 사장님 요청)
+     그 발전소에 항목이 있는 기본 구분(월차점검·기록·측정·열화상촬영)만 — 연차·분기·반기는 그대로 [+ 버튼].
+     더한 구분은 접어 둡니다(머리의 0/9 같은 숫자로 보임) — 폼이 한없이 길어지지 않게.
+     ⚠️ 포함된 구분의 빈 O/X 판정은 제출 때 「O」 로 채워집니다(fillBlankOX_). 안 한 구분은 ☑ 를 풀고 제출.
+     임시저장 이어쓰기·수정 불러오기는 저장된 구분을 그대로 쓰므로 여기를 지나지 않습니다. */
+async function checkAllInspTypes_() {
+  if (S.emergencyMode || S.editing) return;
+  const add = ['월차점검', '기록', '측정', '열화상촬영']
+    .filter(t => (!S.availTypes || S.availTypes[t]) && (S.inspTypes || []).indexOf(t) < 0);
+  const site = S.currentSite;
+  for (const t of add) {
+    if (S.currentSite !== site) return;     // 그 사이 다른 발전소를 열었으면 멈춤
+    await selectInspType(t);
+    setAccOpen_(t, false);
+  }
+}
+
 async function selectInspType(t) {
   // 복수 점검 지원 — 버튼 토글 방식 (예: 월차점검+측정)
   if (!Array.isArray(S.inspTypes)) S.inspTypes = [];
@@ -5510,7 +5527,8 @@ function switchMTab(name) {
   const prog = document.getElementById('mfProg');
   if (prog) prog.style.display = (name === 'form' && !S.emergencyMode) ? '' : 'none';
   if (name === 'form' && !document.getElementById('formEl').innerHTML) {
-    buildForm(currentInspType);
+    // 새로 그리는 폼 = 새 점검 → 점검구분 전부 체크 (2026-11-26)
+    buildForm(currentInspType).then(() => checkAllInspTypes_()).catch(() => {});
   }
   if (name === 'form') updateFormProgress();
 }
@@ -5950,7 +5968,7 @@ function toast(msg, ms=3000) {
       파일을 그냥 더블클릭해서 열면(file://) 등록되지 않습니다 — 정상입니다.
    ───────────────────────────────────────────────────────── */
 (function () {
-  var BUILD = '8d3ad553';
+  var BUILD = '4d2d4168';
   console.log('앱 버전', BUILD);
 
   if (!('serviceWorker' in navigator)) return;
